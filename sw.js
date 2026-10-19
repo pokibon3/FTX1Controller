@@ -14,11 +14,13 @@ self.addEventListener('activate', (e) => {
     .then(() => self.clients.claim()));
 });
 
-// network first so edits show up immediately; cache is the offline fallback
+// network first so edits show up immediately; cache is the offline fallback.
+// Own files skip the HTTP cache (GitHub Pages sends max-age=600), or an update could take 10 minutes to appear.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const own = new URL(e.request.url).origin === location.origin;
   e.respondWith(
-    fetch(e.request)
+    (own ? fetch(e.request.url, { cache: 'no-cache' }) : fetch(e.request))
       .then((res) => {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put(e.request, copy));
