@@ -140,6 +140,15 @@
       </div>
       <div class="row mem" id="cwMem"></div>
       <p class="hint">M1–M5: クリックで送信 / Shift+クリックで現在の文を登録。CWモード・BK-IN ONで送出されます。</p>
+      <div class="row dec-bar">
+        <span class="dec-led" id="decLed" title="キー判定"></span>
+        <button class="btn" id="btnDec" title="RX音声をデコード（USB AUDIO RX 開始中に動作）">DECODE</button>
+        <button class="btn" id="btnDecMode" title="欧文 / 和文">US</button>
+        <button class="btn" id="btnDecTone" title="トーン: AUTO → 600〜1000Hz 手動">AUTO</button>
+        <button class="btn" id="btnDecClr">CLR</button>
+        <span class="tag" id="decInfo">-- WPM</span>
+      </div>
+      <div class="dec-text" id="decText"></div>
     </div>
 
     <div class="panel panel-wide" id="panelConsole">
@@ -180,6 +189,14 @@
           <label class="chk"><input type="checkbox" id="txGate"> PTT連動</label>
           <label class="chk"><input type="checkbox" id="txTone"> 1kHz</label>
         </div>
+    </details>
+    <details open id="secDec">
+      <summary>CW DECODER</summary>
+        <div class="field"><label>入力チャンネル</label>
+          <select id="decCh"><option value="L">L</option><option value="R">R</option><option value="MIX">L+R</option></select>
+        </div>
+        <div class="field"><label>入力ゲイン <span id="decGainV">0 dB</span></label><input type="range" id="decGain" min="-20" max="20" step="1"></div>
+        <p class="hint">デコーダは <a href="https://github.com/pokibon3/cw_decoder4" target="_blank" rel="noopener">CW Decoder 4</a> の WebAssembly 版（GPL）。RX音声に BPF（Q=3, トーン追従）をかけて入力します。</p>
     </details>
     <details open id="secSet">
       <summary>SETUP</summary>

@@ -45,6 +45,11 @@ PTT は既定で CAT (`TX1;`)。RTS/DTR 方式にする場合は SETUP で方式
 | メーター | 送信中は PO + ALC/SWR/COMP/ID/VDD（クリックで切替） |
 | キーボード | ↑↓ 同調（Shift で×10）/ PageUp・Down バンド / Space 送信 |
 
+### CW デコーダ
+
+CW パネル下段の **DECODE** で、USB AUDIO RX の受信音をデコードします（[CW Decoder 4](https://github.com/pokibon3/cw_decoder4) の WebAssembly 版を AudioWorklet で実行。ESP32 版と同じ DSP / デコーダ）。
+`US`/`JP` で欧文・和文、トーンボタンで AUTO（500〜1000Hz 自動同調）と手動 600〜1000Hz を切り替えます。入力チャンネル・入力ゲインは右側パネルの CW DECODER で設定します。
+
 安全のため、ウィンドウのフォーカスが外れると PTT は自動解除され、TOT（既定3分）で送信を打ち切ります。
 
 ## ファイル
@@ -58,6 +63,8 @@ js/knob.js     ノブ / メインダイヤル
 js/scope.js    AF-FFT + ウォーターフォール
 js/app.js      UI 配線
 js/version.js  アプリのバージョン（ヘッダー表示・SW キャッシュ名）
+js/cwdecoder.js  CW デコーダ（RX 音声 → BPF → AudioWorklet）
+js/cwdec/      cw_decoder4 の worklet + wasm（GPL、出典は js/cwdec/README.md）
 sw.js, manifest.webmanifest   PWA
 ```
 

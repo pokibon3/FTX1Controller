@@ -9,6 +9,7 @@ import { AfScope } from './scope.js';
 import { FtxMeter } from './ftxmeter.js';
 import { FilterDisplay } from './filterdisp.js';
 import { APP_VERSION } from './version.js';
+import { CwDecoder } from './cwdecoder.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -28,7 +29,7 @@ const DEFAULTS = {
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'ud',
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
-  sidebar: true, sections: {},
+  sidebar: true, sections: {}, dec: true, decCh: 'L', decGain: 0,
 };
 const cfg = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
@@ -893,6 +894,62 @@ function setupSettings() {
   $('#btnConnect').addEventListener('click', toggleConnect);
 }
 
+// ---------------- CW decoder (on RX audio) ----------------
+function setupDecoder() {
+  const dec = new CwDecoder();
+  dec.channel = cfg.decCh;
+  const textEl = $('#decText');
+  // follow RX audio: the decoder lives in the RX AudioContext, so re-attach whenever RX restarts
+  let pending = null;
+  const sync = async () => {
+    const rx = audio.rx;
+    if (!cfg.dec || !rx) { pending = null; dec.stop(); return; }
+    if (dec.ctx === rx.ctx || pending === rx.ctx) return;
+    pending = rx.ctx;
+    try {
+      await dec.start(rx.ctx, rx.src);
+      dec.setGain(cfg.decGain);
+    } catch (e) { toast(`CWデコーダ開始失敗: ${e.message}`, true); }
+    if (pending === rx.ctx) pending = null;
+  };
+  audio.addEventListener('state', sync);
+  dec.addEventListener('text', () => {
+    const atBottom = textEl.scrollHeight - textEl.scrollTop - textEl.clientHeight < 30;
+    textEl.textContent = dec.text;
+    if (atBottom) textEl.scrollTop = textEl.scrollHeight;
+  });
+
+  $('#btnDec').addEventListener('click', () => {
+    cfg.dec = !cfg.dec;
+    save();
+    $('#btnDec').classList.toggle('on', cfg.dec);
+    if (cfg.dec && !audio.rx) startRxAudio();
+    sync();
+  });
+  $('#btnDecMode').addEventListener('click', () => dec.toggleMode());
+  $('#btnDecTone').addEventListener('click', () => dec.cycleTone());
+  $('#btnDecClr').addEventListener('click', () => dec.clear());
+  $('#decCh').value = cfg.decCh;
+  $('#decCh').addEventListener('change', (e) => { cfg.decCh = e.target.value; dec.setChannel(cfg.decCh); save(); });
+  const gainLabel = () => { $('#decGainV').textContent = `${cfg.decGain > 0 ? '+' : ''}${cfg.decGain} dB`; };
+  $('#decGain').value = cfg.decGain;
+  gainLabel();
+  $('#decGain').addEventListener('input', (e) => { cfg.decGain = +e.target.value; dec.setGain(cfg.decGain); gainLabel(); save(); });
+
+  // status labels change at frame rate; only touch the DOM when they differ
+  let last = '';
+  setInterval(() => {
+    const key = [dec.active, dec.jp, dec.toneAuto, dec.toneHz, dec.wpm, dec.gate].join();
+    if (key === last) return;
+    last = key;
+    $('#btnDecMode').textContent = dec.jp ? 'JP' : 'US';
+    $('#btnDecTone').textContent = dec.toneAuto || !dec.toneHz ? 'AUTO' : `${dec.toneHz}Hz`;
+    $('#decInfo').textContent = dec.active ? `${dec.wpm || '--'} WPM · ${dec.toneHz || '---'}Hz` : 'OFF';
+    $('#decLed').classList.toggle('on', dec.active && dec.gate);
+  }, 100);
+  $('#btnDec').classList.toggle('on', cfg.dec);
+}
+
 // ---------------- right sidebar (USB AUDIO / SETUP) ----------------
 function setupSidebar() {
   $('#appVer').textContent = `v${APP_VERSION}`;
@@ -1021,6 +1078,7 @@ setupCw();
 setupAudio();
 setupSettings();
 setupSidebar();
+setupDecoder();
 render();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
