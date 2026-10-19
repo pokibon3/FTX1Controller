@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3d42"/><stop offset="1" stop-color="#141518"/></linearGradient>
+    <radialGradient id="k" cx=".38" cy=".3" r=".8"><stop offset="0" stop-color="#7a8088"/><stop offset=".5" stop-color="#34373c"/><stop offset="1" stop-color="#121316"/></radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#b)"/>
+  <rect x="54" y="70" width="404" height="150" rx="18" fill="#04101f" stroke="#3fd7ff" stroke-width="5"/>
+  <text x="256" y="172" font-family="Helvetica, Arial, sans-serif" font-size="92" font-weight="700" fill="#eef4ff" text-anchor="middle">FTX-1</text>
+  <circle cx="256" cy="360" r="104" fill="#0b0c0d"/>
+  <circle cx="256" cy="360" r="92" fill="url(#k)"/>
+  <circle cx="256" cy="310" r="20" fill="#1c1e22"/>
+  <rect x="236" y="250" width="40" height="7" rx="3.5" fill="#ff8a1e"/>
+</svg>

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FTX-1 Controller</title>
+  <meta name="description" content="Yaesu FTX-1 CAT / USB Audio controller for Chrome">
+  <meta name="theme-color" content="#121316">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:ital,wdth,wght@0,100..125,100..900;1,100..125,100..900&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="unsupported" class="banner" hidden>
+    このブラウザは Web Serial API に対応していません。デスクトップ版 Google Chrome / Microsoft Edge で開いてください。
+  </div>
+
+  <div id="app">
+  <header id="topbar">
+    <div class="brand"><b>FTX-1 Controller</b><small class="ver" id="appVer"></small></div>
+    <button class="btn" id="btnMenu" title="USB AUDIO / SETUP パネルの表示切替">&#9776; SETUP</button>
+  </header>
+
+  <div id="mainCol">
+  <main class="radio" id="radio">
+    <!-- top edge keys (long flat keys with the legend printed below, as on the field head) -->
+    <div class="top-edge">
+      <button class="tkey-cat" id="btnConnect" title="CATポートに接続 / 切断"><span class="tled"></span>CAT</button>
+      <span class="te-gap"></span>
+      <div class="tk"><button class="tbar" data-act="band"></button><label>MAG<em>BAND</em></label></div>
+      <div class="tk"><button class="tbar" data-act="nw"></button><label>N/W<em>MODE</em></label></div>
+      <span class="te-gap2"></span>
+      <div class="tk tk-r"><button class="tbar" data-act="split" id="keySplit"></button><label><em>SPLIT</em></label></div>
+    </div>
+
+    <div class="head">
+      <!-- left: SUB DIAL / LOCK / SUB AF-RF-SQL -->
+      <section class="h-left">
+        <div class="kw">
+          <label>SUB DIAL</label>
+          <div class="knob knob-r" id="knSubDial" title="SUB側の周波数 / クリックでMAIN⇔SUB入替"><div class="cap"><i></i></div></div>
+        </div>
+        <div class="kw">
+          <span class="pwr-led" id="pwrLed"></span>
+          <button class="lockbtn" id="btnLock" title="ダイヤルロック">⏻LOCK</button>
+        </div>
+        <div class="kw">
+          <label>SUB <b>DSP</b><br>AF/RF/SQL<em id="knAF1mode">AF</em></label>
+          <div class="knob knob-r" id="knAF1" title="SUB AF / クリックで RF・SQL 切替"><div class="cap"><i></i></div></div>
+        </div>
+      </section>
+
+      <!-- center: 4.3" TFT -->
+      <section class="h-screen">
+        <div class="lcd lay-ud" id="lcd">
+          <div class="st-bar" id="stBar"></div>
+
+          <div class="band" id="band0" data-vfo="0">
+            <div class="b-tags"><span class="tg-side">MAIN</span><span class="tg-vfo">VFO</span></div>
+            <canvas class="b-meter" id="meter0" title="タッチで送信メーター選択"></canvas>
+            <div class="b-freq"><div class="freq" id="freq0"></div></div>
+            <div class="b-side"><div class="b-func" id="funcBox">AF GAIN</div><button class="b-mode" data-vfo="0">USB</button><span class="b-txrx" id="txrx0">TXRX</span></div>
+            <div class="b-rx" id="rx0"></div>
+            <div class="b-filt"><canvas id="filt0"></canvas></div>
+          </div>
+
+          <div class="band" id="band1" data-vfo="1">
+            <div class="b-tags"><span class="tg-side">SUB</span><span class="tg-vfo">VFO</span></div>
+            <canvas class="b-meter" id="meter1" title="タッチで送信メーター選択"></canvas>
+            <div class="b-freq"><div class="freq" id="freq1"></div></div>
+            <div class="b-side"><button class="b-mode" data-vfo="1">LSB</button><span class="b-txrx" id="txrx1">RX</span></div>
+            <div class="b-rx" id="rx1"></div>
+            <div class="b-filt"><canvas id="filt1"></canvas></div>
+          </div>
+
+          <div class="scope"><canvas id="scope"></canvas><div class="sc-info" id="scInfo"></div></div>
+
+          <div class="softbar" id="softbar"></div>
+
+          <div class="pop" id="pop" hidden>
+            <div class="pop-title"><span id="popTitle">MODE</span><button class="pop-x" id="popClose">✕</button></div>
+            <div class="pop-grid" id="popGrid"></div>
+          </div>
+
+          <div class="lcd-popup" id="popup" hidden>
+            <div class="popup-label" id="popupLabel"></div>
+            <div class="popup-value" id="popupValue"></div>
+            <div class="popup-bar"><i id="popupBar"></i></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- right: keys hugging the MAIN DIAL, then FUNC / DISP / MAIN AF-RF-SQL -->
+      <section class="h-right">
+        <div class="cluster">
+          <button class="rk rk-tl" data-act="qmb" title="押す: QMB呼出 / 長押し: QMB登録"><b>QMB</b></button>
+          <button class="rk rk-tr" data-act="clar" id="keyClar" title="押す: CLAR RX→TX→RXTX→OFF / 長押し: オフセットクリア"><b>CLAR</b></button>
+          <button class="rk rk-bl" data-act="back"><b>BACK</b></button>
+          <button class="rk rk-br" data-act="fine" id="keyFine" title="押す: FINE / 長押し: FAST"><b>FINE<br>/FAST</b></button>
+          <div class="busy"><small>BUSY/TX<br>SUB&nbsp;&nbsp;MAIN</small><span class="slot"><i id="ledBusy1"></i><i id="ledBusy0"></i></span></div>
+          <div class="vfo-arc" id="vfoArc"></div>
+          <div class="dial" id="dial">
+            <div class="dial-ring"></div>
+            <div class="dial-disc"><div class="dial-dimple"></div></div>
+          </div>
+        </div>
+        <div class="rcol">
+          <div class="kw">
+            <label>FUNC</label>
+            <div class="knob knob-r" id="knFunc" title="FUNC（LCDで割当てた機能を調整）"><div class="cap"><i></i></div></div>
+          </div>
+          <button class="dispkey" data-act="disp">DISP</button>
+          <div class="kw">
+            <label>MAIN <b>DSP</b><br>AF/RF/SQL<em id="knAF0mode">AF</em></label>
+            <div class="knob knob-r" id="knAF0" title="MAIN AF / クリックで RF・SQL 切替"><div class="cap"><i></i></div></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ===== PC side deck ===== -->
+  <section class="deck">
+    <div class="panel" id="panelMic">
+      <h2>MIC <span class="tag tag-tx" id="pttState">RX</span></h2>
+      <button class="ptt" id="btnPtt" title="押している間送信（Space キーでも可）"><span class="ptt-led"></span>PTT</button>
+      <label class="chk"><input type="checkbox" id="pttLatch"> LATCH（クリックで送受切替）</label>
+      <p class="hint">Space キー長押しでも送信。ウィンドウから離れると自動で受信に戻ります。</p>
+    </div>
+
+    <div class="panel" id="panelCw">
+      <h2>CW <span class="tag" id="cwWpm">20 WPM</span></h2>
+      <textarea id="cwText" rows="3" placeholder="CQ CQ DE JA1XXX K" spellcheck="false"></textarea>
+      <div class="row">
+        <button class="btn" id="btnCwSend">SEND</button>
+        <button class="btn" id="btnCwStop">STOP</button>
+      </div>
+      <div class="row mem" id="cwMem"></div>
+      <p class="hint">M1–M5: クリックで送信 / Shift+クリックで現在の文を登録。CWモード・BK-IN ONで送出されます。</p>
+    </div>
+
+    <div class="panel panel-wide" id="panelConsole">
+      <h2>CAT CONSOLE <span class="tag" id="catErr">ERR 0</span></h2>
+      <div class="log" id="log"></div>
+      <div class="row">
+        <input type="text" id="rawCmd" placeholder="例: FA; / MD02; / EX040101;" spellcheck="false">
+        <button class="btn" id="btnRaw">SEND</button>
+        <label class="chk"><input type="checkbox" id="showPoll"> ポーリング表示</label>
+        <button class="btn" id="btnClearLog">CLR</button>
+      </div>
+    </div>
+
+  </section>
+  </div>
+
+  <aside id="sidebar" aria-label="設定">
+    <details open id="secRx">
+      <summary>USB AUDIO <span class="tag">RX</span></summary>
+        <div class="field"><label>入力（FTX-1）</label><select id="rxIn"></select></div>
+        <div class="field"><label>出力（スピーカー）</label><select id="rxOut"></select></div>
+        <div class="field"><label>音量</label><input type="range" id="rxVol" min="0" max="2" step="0.01"></div>
+        <div class="vu"><i id="rxVu"></i></div>
+        <div class="row">
+          <button class="btn" id="btnRx">RX開始</button>
+          <button class="btn" id="btnMute">MUTE</button>
+          <button class="btn rec" id="btnRec" disabled>● REC</button>
+        </div>
+    </details>
+    <details open id="secTx">
+      <summary>USB AUDIO <span class="tag tag-tx">TX</span></summary>
+        <div class="field"><label>マイク（PC）</label><select id="txIn"></select></div>
+        <div class="field"><label>出力（FTX-1）</label><select id="txOut"></select></div>
+        <div class="field"><label>送信レベル</label><input type="range" id="txGain" min="0" max="3" step="0.01"></div>
+        <div class="vu vu-tx"><i id="txVu"></i></div>
+        <div class="row">
+          <button class="btn" id="btnTx">TX音声 ON</button>
+          <label class="chk"><input type="checkbox" id="txGate"> PTT連動</label>
+          <label class="chk"><input type="checkbox" id="txTone"> 1kHz</label>
+        </div>
+    </details>
+    <details open id="secSet">
+      <summary>SETUP</summary>
+        <div class="field"><label>CAT ボーレート</label>
+          <select id="baud">
+            <option value="auto" selected>自動検出</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option>
+          </select>
+        </div>
+        <div class="field"><label>PTT 方式</label>
+          <select id="pttMethod">
+            <option value="cat1">CAT (TX1)</option>
+            <option value="cat2">CAT (TX2 / DATA)</option>
+            <option value="rts">RTS</option>
+            <option value="dtr">DTR</option>
+          </select>
+        </div>
+        <div class="row">
+          <button class="btn" id="btnPttPort">PTTポート選択</button>
+          <span class="hint" id="pttPortState">未接続（CATポートを使用）</span>
+        </div>
+        <div class="field"><label>ダイヤル分解能</label>
+          <select id="dialRes">
+            <option value="100">100 step/回転</option><option value="250">250 step/回転</option><option value="500">500 step/回転</option><option value="1000">1000 step/回転</option>
+          </select>
+        </div>
+        <div class="field"><label>TOT（送信タイマー）</label>
+          <select id="tot"><option value="60">1分</option><option value="180">3分</option><option value="300">5分</option><option value="600">10分</option><option value="0">OFF</option></select>
+        </div>
+        <div class="field"><label>AF-FFT 帯域</label>
+          <select id="scopeSpan"><option value="3000">3 kHz</option><option value="4000">4 kHz</option><option value="6000">6 kHz</option><option value="12000">12 kHz</option></select>
+        </div>
+        <p class="hint">キー操作: ↑↓ 同調 / Shift+↑↓ ×10 / PageUp・PageDown バンド / Space 送信</p>
+    </details>
+  </aside>
+  </div>
+
+  <dialog id="entryDlg" class="entry">
+    <form method="dialog">
+      <div class="entry-head"><span id="entryVfo">MAIN</span><output id="entryShow">-</output><span class="entry-unit">MHz</span></div>
+      <input id="entryInput" type="hidden">
+      <div class="keypad" id="keypad">
+        <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-k="bs">⌫</button>
+        <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button class="ent" value="ok" id="entryOk">ENT</button>
+        <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
+        <button type="button" data-k="0">0</button><button type="button" data-k=".">.</button><button type="button" data-k="ce">CE</button><button value="cancel">BACK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
