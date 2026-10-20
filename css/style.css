@@ -417,7 +417,22 @@ button { font: inherit; color: inherit; }
 .pt.on span { color: var(--accent); }
 .pt.cur { background: linear-gradient(180deg, #f4f6f8, #b9bec5); color: #000; border-color: #fff; }
 .pt.cur span { color: #222; }
+/* FUNC menu (radio's function pages): 7 x 4 gray keys over the lower half of the screen */
+.lcd .pop.fmenu, .lcd.lay-lr .pop.fmenu { top: 25.6cqi; bottom: 0; background: #000; }
+.pop.fmenu .pop-title { display: none; }
+.pop.fmenu .pop-grid { grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(4, 1fr); grid-auto-rows: auto; gap: 1.2cqi .6cqi; padding: .4cqi .3cqi .3cqi; overflow: hidden; }
+.pop.fmenu .pt { border: 0; border-radius: .5cqi; background: linear-gradient(180deg, #686c72 0%, #4c4f54 50%, #3b3d41 100%); gap: 0; box-shadow: inset 0 .15cqi 0 rgba(255,255,255,.18); }
+.pop.fmenu .pt b { font-size: 2.3cqi; font-weight: 700; color: #f4f6f8; line-height: 1.15; }
+.pop.fmenu .pt span { font-size: 2.6cqi; font-weight: 700; color: #f0c534; line-height: 1.1; }
+.pop.fmenu .pt.func { box-shadow: inset 0 0 0 .25cqi #f0c534; }
+.pop.fmenu .pt.page { background: #f4f6f8; }
+.pop.fmenu .pt.page b, .pop.fmenu .pt.page span { color: #000; font-size: 2.3cqi; }
+.pop.fmenu .pt.na b, .pop.fmenu .pt.na span { color: #8d9198; }
+.pop.fmenu .pt.nav b { color: #f0c534; }
+.pop.fmenu .pt.nav span { width: 80%; height: .5cqi; background: #f4f6f8; border-radius: .2cqi; margin-top: .6cqi; }
+.pop.fmenu .pt.on, .pop.fmenu .pt.cur { background: linear-gradient(180deg, #686c72 0%, #4c4f54 50%, #3b3d41 100%); }
 .pt.na { opacity: .35; cursor: default; }
+.pop.fmenu .pt.na { opacity: 1; }
 .pt.func { border-color: var(--accent); box-shadow: inset 0 0 0 .2cqi var(--accent); }
 
 /* FUNC value popup */

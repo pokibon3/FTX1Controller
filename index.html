@@ -53,6 +53,14 @@
         <div class="field"><label>入力ゲイン <span id="decGainV">0 dB</span></label><input type="range" id="decGain" min="-20" max="20" step="1"></div>
         <p class="hint">デコーダは <a href="https://github.com/pokibon3/cw_decoder4" target="_blank" rel="noopener">CW Decoder 4</a> の WebAssembly 版（GPL）。RX音声に BPF（Q=3, トーン追従）をかけて入力します。</p>
     </details>
+    <details open id="secVfo">
+      <summary>VFO</summary>
+        <div class="row vfo-keys">
+          <button class="btn" data-vfo="lock">LOCK</button><button class="btn" data-vfo="dual">DUAL RX</button>
+          <button class="btn" data-vfo="atob">A▸B</button><button class="btn" data-vfo="btoa">B▸A</button>
+          <button class="btn" data-vfo="step">DIAL STEP</button>
+        </div>
+    </details>
     <details open id="secSet">
       <summary>SETUP</summary>
         <div class="field"><label>CAT ボーレート</label>
