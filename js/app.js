@@ -1365,6 +1365,17 @@ if (standalone()) {
     }, 150);
   };
   if (document.readyState === 'complete') fit(); else window.addEventListener('load', fit, { once: true });
+  // CW panels / CAT CONSOLE shown or hidden later: grow or shrink the window height with the content
+  let lastBottom = 0;
+  new ResizeObserver(() => {
+    const bottom = Math.ceil($('#app').getBoundingClientRect().bottom + window.scrollY);
+    if (!lastBottom) { lastBottom = bottom; return; }
+    if (bottom === lastBottom) return;
+    lastBottom = bottom;
+    const chromeH = window.outerHeight - window.innerHeight;
+    const room = screen.availHeight - Math.max(0, window.screenY - (screen.availTop || 0));
+    window.resizeTo(window.outerWidth, Math.min(room, bottom + 12 + $('#statusbar').offsetHeight + chromeH));
+  }).observe($('#app'));
 }
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
