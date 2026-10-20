@@ -1276,25 +1276,23 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
     toast('Chrome のメニュー（右上の ⋮）→「キャスト、保存、共有」→「ページをアプリとしてインストール」から入れてください', false, 8000);
   });
 }
-// Installed app: Chrome opens the first window at a default size that does not fit the panel. Size it to the
-// content once (later launches keep whatever size the user leaves it at).
+// Installed app: fit the window to the panel on every launch (the side panel starts closed, so the content is the
+// field head + status bar): width = the field head's maximum width, height = what the page then needs.
 if (standalone()) {
-  let sized = false;
-  try { sized = localStorage.getItem('ftx1.winSized') === '1'; } catch {}
-  if (!sized) {
-    const fit = () => {
-      const chromeW = window.outerWidth - window.innerWidth, chromeH = window.outerHeight - window.innerHeight;
-      const w = Math.min(screen.availWidth, 1600 + chromeW);
-      window.resizeTo(w, window.outerHeight);
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const h = Math.min(screen.availHeight, document.documentElement.scrollHeight + chromeH);
-        window.resizeTo(w, h);
-        window.moveTo(Math.max(0, (screen.availWidth - w) / 2), Math.max(0, (screen.availHeight - h) / 2));
-        try { localStorage.setItem('ftx1.winSized', '1'); } catch {}
-      }));
-    };
-    if (document.readyState === 'complete') fit(); else window.addEventListener('load', fit, { once: true });
-  }
+  const fit = () => {
+    const chromeW = window.outerWidth - window.innerWidth, chromeH = window.outerHeight - window.innerHeight;
+    const body = getComputedStyle(document.body);
+    const contentW = 1320 + parseFloat(body.paddingLeft) + parseFloat(body.paddingRight);
+    const w = Math.min(screen.availWidth, contentW + chromeW);
+    window.resizeTo(w, Math.min(screen.availHeight, window.outerHeight));
+    // wait for the relayout at the new width, then take the height the page needs
+    setTimeout(() => {
+      const h = Math.min(screen.availHeight, document.documentElement.scrollHeight + chromeH);
+      window.resizeTo(w, h);
+      window.moveTo(Math.max(0, (screen.availWidth - w) / 2), Math.max(0, (screen.availHeight - h) / 2));
+    }, 150);
+  };
+  if (document.readyState === 'complete') fit(); else window.addEventListener('load', fit, { once: true });
 }
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
