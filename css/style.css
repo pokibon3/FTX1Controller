@@ -24,7 +24,7 @@ body {
   color: var(--text);
   font-family: var(--font-ui);
   min-height: 100vh;
-  padding: 20px 16px 48px;
+  padding: 20px 16px 38px;
   -webkit-font-smoothing: antialiased;
 }
 button { font: inherit; color: inherit; }
@@ -446,6 +446,8 @@ dialog.entry::backdrop { background: rgba(0,0,0,.55); }
   max-width: 1320px; margin: 22px auto 0;
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
 }
+/* nothing to show (not in CW, CAT CONSOLE off): no gap under the field head */
+.deck:not(:has(> .panel:not([hidden]))) { display: none; }
 .panel {
   background: var(--panel); border: 1px solid var(--panel-line); border-radius: 12px; padding: 12px 14px;
   display: flex; flex-direction: column; gap: 9px; min-width: 0;
