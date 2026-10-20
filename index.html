@@ -19,16 +19,81 @@
   </div>
 
   <div id="app">
-  <header id="topbar">
-    <div class="brand"><b>FTX-1 Controller</b><small class="ver" id="appVer"></small></div>
-    <button class="btn" id="btnMenu" title="USB AUDIO / SETUP パネルの表示切替">&#9776; SETUP</button>
-  </header>
+  <aside id="sidebar" aria-label="設定">
+    <details open id="secRx">
+      <summary>USB AUDIO <span class="tag">RX</span></summary>
+        <div class="field"><label>入力（FTX-1）</label><select id="rxIn"></select></div>
+        <div class="field"><label>出力（スピーカー）</label><select id="rxOut"></select></div>
+        <div class="field"><label>音量</label><input type="range" id="rxVol" min="0" max="2" step="0.01"></div>
+        <div class="vu"><i id="rxVu"></i></div>
+        <div class="row">
+          <button class="btn" id="btnRx">RX開始</button>
+          <button class="btn" id="btnMute">MUTE</button>
+          <button class="btn rec" id="btnRec" disabled>● REC</button>
+        </div>
+    </details>
+    <details open id="secTx">
+      <summary>USB AUDIO <span class="tag tag-tx">TX</span></summary>
+        <div class="field"><label>マイク（PC）</label><select id="txIn"></select></div>
+        <div class="field"><label>出力（FTX-1）</label><select id="txOut"></select></div>
+        <div class="field"><label>送信レベル</label><input type="range" id="txGain" min="0" max="3" step="0.01"></div>
+        <div class="vu vu-tx"><i id="txVu"></i></div>
+        <div class="row">
+          <button class="btn" id="btnTx">TX音声 ON</button>
+          <label class="chk"><input type="checkbox" id="txGate"> PTT連動</label>
+          <label class="chk"><input type="checkbox" id="txTone"> 1kHz</label>
+        </div>
+    </details>
+    <details open id="secDec">
+      <summary>CW DECODER</summary>
+        <div class="field"><label>入力チャンネル</label>
+          <select id="decCh"><option value="L">L</option><option value="R">R</option><option value="MIX">L+R</option></select>
+        </div>
+        <div class="field"><label>入力ゲイン <span id="decGainV">0 dB</span></label><input type="range" id="decGain" min="-20" max="20" step="1"></div>
+        <p class="hint">デコーダは <a href="https://github.com/pokibon3/cw_decoder4" target="_blank" rel="noopener">CW Decoder 4</a> の WebAssembly 版（GPL）。RX音声に BPF（Q=3, トーン追従）をかけて入力します。</p>
+    </details>
+    <details open id="secSet">
+      <summary>SETUP</summary>
+        <div class="field"><label>CAT ボーレート</label>
+          <select id="baud">
+            <option value="auto" selected>自動検出</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option>
+          </select>
+        </div>
+        <label class="chk"><input type="checkbox" id="pttLatch"> TX ボタンを LATCH（クリックで送受切替）</label>
+        <div class="field"><label>PTT 方式</label>
+          <select id="pttMethod">
+            <option value="cat1">CAT (TX1)</option>
+            <option value="cat2">CAT (TX2 / DATA)</option>
+            <option value="rts">RTS</option>
+            <option value="dtr">DTR</option>
+          </select>
+        </div>
+        <div class="row">
+          <button class="btn" id="btnPttPort">PTTポート選択</button>
+          <span class="hint" id="pttPortState">未接続（CATポートを使用）</span>
+        </div>
+        <div class="field"><label>ダイヤル分解能</label>
+          <select id="dialRes">
+            <option value="100">100 step/回転</option><option value="250">250 step/回転</option><option value="500">500 step/回転</option><option value="1000">1000 step/回転</option>
+          </select>
+        </div>
+        <div class="field"><label>TOT（送信タイマー）</label>
+          <select id="tot"><option value="60">1分</option><option value="180">3分</option><option value="300">5分</option><option value="600">10分</option><option value="0">OFF</option></select>
+        </div>
+        <div class="field"><label>AF-FFT 帯域</label>
+          <select id="scopeSpan"><option value="3000">3 kHz</option><option value="4000">4 kHz</option><option value="6000">6 kHz</option><option value="12000">12 kHz</option></select>
+        </div>
+        <p class="hint">キー操作: ↑↓ 同調 / Shift+↑↓ ×10 / PageUp・PageDown バンド / Space 送信</p>
+    </details>
+  </aside>
 
   <div id="mainCol">
   <main class="radio" id="radio">
     <!-- top edge keys (long flat keys with the legend printed below, as on the field head) -->
     <div class="top-edge">
-      <button class="tkey-cat" id="btnConnect" title="CATポートに接続 / 切断"><span class="tled"></span>CAT</button>
+      <button class="tkey-cat tkey-menu" id="btnMenu" title="USB AUDIO / SETUP パネルの表示切替">&#9776; SETUP</button>
+      <button class="tkey-cat" id="btnConnect" title="電源（CAT ポートに接続 / 切断）"><span class="tled"></span>POWER</button>
+      <div class="brand"><b>FTX-1 Controller</b><small class="ver" id="appVer"></small></div>
       <span class="te-gap"></span>
       <div class="tk"><button class="tbar" data-act="band"></button><label>MAG<em>BAND</em></label></div>
       <div class="tk"><button class="tbar" data-act="nw"></button><label>N/W<em>MODE</em></label></div>
@@ -37,15 +102,14 @@
     </div>
 
     <div class="head">
-      <!-- left: SUB DIAL / LOCK / SUB AF-RF-SQL -->
+      <!-- left: SUB DIAL / TX / SUB AF-RF-SQL -->
       <section class="h-left">
         <div class="kw">
           <label>SUB DIAL</label>
           <div class="knob knob-r" id="knSubDial" title="SUB側の周波数 / クリックでMAIN⇔SUB入替"><div class="cap"><i></i></div></div>
         </div>
         <div class="kw">
-          <span class="pwr-led" id="pwrLed"></span>
-          <button class="lockbtn" id="btnLock" title="ダイヤルロック">⏻LOCK</button>
+          <button class="txbtn" id="btnPtt" title="押している間送信（Space キーでも可。SETUP の LATCH でクリック切替）">TX</button>
         </div>
         <div class="kw">
           <label>SUB <b>DSP</b><br>AF/RF/SQL<em id="knAF1mode">AF</em></label>
@@ -124,15 +188,8 @@
 
   <!-- ===== PC side deck ===== -->
   <section class="deck">
-    <div class="panel" id="panelMic">
-      <h2>MIC <span class="tag tag-tx" id="pttState">RX</span></h2>
-      <button class="ptt" id="btnPtt" title="押している間送信（Space キーでも可）"><span class="ptt-led"></span>PTT</button>
-      <label class="chk"><input type="checkbox" id="pttLatch"> LATCH（クリックで送受切替）</label>
-      <p class="hint">Space キー長押しでも送信。ウィンドウから離れると自動で受信に戻ります。</p>
-    </div>
-
     <div class="panel" id="panelCw">
-      <h2>CW <span class="tag" id="cwWpm">20 WPM</span></h2>
+      <h2>CW <span class="tag tag-tx">TX</span><span class="tag" id="cwWpm">20 WPM</span></h2>
       <textarea id="cwText" rows="3" placeholder="CQ CQ DE JA1XXX K" spellcheck="false"></textarea>
       <div class="row">
         <button class="btn" id="btnCwSend">SEND</button>
@@ -140,13 +197,16 @@
       </div>
       <div class="row mem" id="cwMem"></div>
       <p class="hint">M1–M5: クリックで送信 / Shift+クリックで現在の文を登録。CWモード・BK-IN ONで送出されます。</p>
-      <div class="row dec-bar">
+    </div>
+
+    <div class="panel" id="panelDec">
+      <h2>CW <span class="tag">RX</span><span class="tag" id="decInfo">-- WPM</span></h2>
+      <div class="row">
         <span class="dec-led" id="decLed" title="キー判定"></span>
         <button class="btn" id="btnDec" title="RX音声をデコード（USB AUDIO RX 開始中に動作）">DECODE</button>
         <button class="btn" id="btnDecMode" title="欧文 / 和文">US</button>
         <button class="btn" id="btnDecTone" title="トーン: AUTO → 600〜1000Hz 手動">AUTO</button>
         <button class="btn" id="btnDecClr">CLR</button>
-        <span class="tag" id="decInfo">-- WPM</span>
       </div>
       <div class="dec-text" id="decText"></div>
     </div>
@@ -165,72 +225,6 @@
   </section>
   </div>
 
-  <aside id="sidebar" aria-label="設定">
-    <details open id="secRx">
-      <summary>USB AUDIO <span class="tag">RX</span></summary>
-        <div class="field"><label>入力（FTX-1）</label><select id="rxIn"></select></div>
-        <div class="field"><label>出力（スピーカー）</label><select id="rxOut"></select></div>
-        <div class="field"><label>音量</label><input type="range" id="rxVol" min="0" max="2" step="0.01"></div>
-        <div class="vu"><i id="rxVu"></i></div>
-        <div class="row">
-          <button class="btn" id="btnRx">RX開始</button>
-          <button class="btn" id="btnMute">MUTE</button>
-          <button class="btn rec" id="btnRec" disabled>● REC</button>
-        </div>
-    </details>
-    <details open id="secTx">
-      <summary>USB AUDIO <span class="tag tag-tx">TX</span></summary>
-        <div class="field"><label>マイク（PC）</label><select id="txIn"></select></div>
-        <div class="field"><label>出力（FTX-1）</label><select id="txOut"></select></div>
-        <div class="field"><label>送信レベル</label><input type="range" id="txGain" min="0" max="3" step="0.01"></div>
-        <div class="vu vu-tx"><i id="txVu"></i></div>
-        <div class="row">
-          <button class="btn" id="btnTx">TX音声 ON</button>
-          <label class="chk"><input type="checkbox" id="txGate"> PTT連動</label>
-          <label class="chk"><input type="checkbox" id="txTone"> 1kHz</label>
-        </div>
-    </details>
-    <details open id="secDec">
-      <summary>CW DECODER</summary>
-        <div class="field"><label>入力チャンネル</label>
-          <select id="decCh"><option value="L">L</option><option value="R">R</option><option value="MIX">L+R</option></select>
-        </div>
-        <div class="field"><label>入力ゲイン <span id="decGainV">0 dB</span></label><input type="range" id="decGain" min="-20" max="20" step="1"></div>
-        <p class="hint">デコーダは <a href="https://github.com/pokibon3/cw_decoder4" target="_blank" rel="noopener">CW Decoder 4</a> の WebAssembly 版（GPL）。RX音声に BPF（Q=3, トーン追従）をかけて入力します。</p>
-    </details>
-    <details open id="secSet">
-      <summary>SETUP</summary>
-        <div class="field"><label>CAT ボーレート</label>
-          <select id="baud">
-            <option value="auto" selected>自動検出</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option>
-          </select>
-        </div>
-        <div class="field"><label>PTT 方式</label>
-          <select id="pttMethod">
-            <option value="cat1">CAT (TX1)</option>
-            <option value="cat2">CAT (TX2 / DATA)</option>
-            <option value="rts">RTS</option>
-            <option value="dtr">DTR</option>
-          </select>
-        </div>
-        <div class="row">
-          <button class="btn" id="btnPttPort">PTTポート選択</button>
-          <span class="hint" id="pttPortState">未接続（CATポートを使用）</span>
-        </div>
-        <div class="field"><label>ダイヤル分解能</label>
-          <select id="dialRes">
-            <option value="100">100 step/回転</option><option value="250">250 step/回転</option><option value="500">500 step/回転</option><option value="1000">1000 step/回転</option>
-          </select>
-        </div>
-        <div class="field"><label>TOT（送信タイマー）</label>
-          <select id="tot"><option value="60">1分</option><option value="180">3分</option><option value="300">5分</option><option value="600">10分</option><option value="0">OFF</option></select>
-        </div>
-        <div class="field"><label>AF-FFT 帯域</label>
-          <select id="scopeSpan"><option value="3000">3 kHz</option><option value="4000">4 kHz</option><option value="6000">6 kHz</option><option value="12000">12 kHz</option></select>
-        </div>
-        <p class="hint">キー操作: ↑↓ 同調 / Shift+↑↓ ×10 / PageUp・PageDown バンド / Space 送信</p>
-    </details>
-  </aside>
   </div>
 
   <dialog id="entryDlg" class="entry">

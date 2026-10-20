@@ -223,6 +223,7 @@ const SCREENS = {
       { label: 'B▸A', value: () => 'COPY', act: () => radio.copyBtoA() },
       { label: 'SPLIT', value: () => onOff(isSplit()), on: isSplit, act: toggleSplit },
       { label: 'DUAL RX', value: () => onOff(s.dual), on: () => s.dual, act: () => radio.setDual(!s.dual) },
+      { label: 'LOCK', value: () => onOff(s.lock), on: () => s.lock, act: () => radio.setLock(!s.lock) },
       { label: 'CLAR', func: 'clar', on: () => s.clarRx[V()] || s.clarTx[V()] },
       { label: 'DIAL STEP', value: () => (cfg.step === 'auto' ? 'AUTO' : stepText(cfg.step)), act: () => ACTIONS.step() },
       { label: 'F.INPUT', value: () => 'KEYPAD', act: () => { closePop(); openEntry(0); } },
@@ -620,7 +621,6 @@ function setupKeys() {
     el.addEventListener('pointercancel', cancel);
     el.addEventListener('click', () => { cancel(); if (!held) { a.press(); render(); } });
   });
-  $('#btnLock').addEventListener('click', () => radio.setLock(!s.lock));
 }
 
 // ---------------- keyboard ----------------
@@ -1040,8 +1040,6 @@ function draw() {
   $('#keySplit').classList.toggle('on', isSplit());
   $('#keyFine').classList.toggle('on', ui.fine || ui.fast);
   $('#keyClar').classList.toggle('on', s.clarRx[0] || s.clarTx[0]);
-  $('#btnLock').classList.toggle('locked', s.lock);
-  $('#pwrLed').classList.toggle('on', conn);
   // VFO mode indicator arcs: blue = VFO, red = clarifier. BUSY/TX: red on TX, green with signal above squelch
   $('#vfoArc').className = `vfo-arc ${conn ? (s.clarRx[0] || s.clarTx[0] ? 'red' : 'blue') : ''}`;
   for (let v = 0; v < 2; v++) {
@@ -1050,7 +1048,10 @@ function draw() {
   }
 
   $('#btnPtt').classList.toggle('on', s.tx || ui.ptt);
-  $('#pttState').textContent = s.tx || ui.ptt ? 'TX' : 'RX';
+  // CW TX / RX panels only while the operated VFO is in CW
+  const cw = isCW(s.mode[V()]);
+  $('#panelCw').hidden = !cw;
+  $('#panelDec').hidden = !cw;
   $('#cwWpm').textContent = `${s.ks} WPM`;
   $('#catErr').textContent = `ERR ${s.errors}`;
   $('#catErr').classList.toggle('err', s.errors > 0);

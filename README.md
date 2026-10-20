@@ -24,12 +24,12 @@ Finder から `start.command` をダブルクリックでも可。アドレス�
 ## 接続
 
 1. FTX-1 と PC を USB 接続（2つのシリアルポートが現れます）
-2. **CAT** ボタン → CP2105 の 2 ポートのうち CAT 側を選択
+2. **POWER** ボタン（電源を入れる = CAT 接続）→ CP2105 の 2 ポートのうち CAT 側を選択
    （macOS では `cu.usbserial-XXXXXXXX1` のように末尾 **1** の方。違うポートを選ぶと「応答しません」と表示されます）
 3. ボーレートは既定で自動検出（38400 / 4800 / 9600 / 19200 / 115200 を `ID;` で順に試行）
-4. 右側パネルの USB AUDIO RX/TX で「USB Audio CODEC」を選択（自動選択されます）
+4. 左側パネルの USB AUDIO RX/TX で「USB Audio CODEC」を選択（自動選択されます）
 
-右上の **☰ SETUP** ボタンで USB AUDIO / SETUP の右側パネルを表示・非表示できます（各セクションは見出しクリックで折りたたみ、状態は保存されます）。画面幅 900px 以下ではオーバーレイ表示になります。
+左上の **☰ SETUP** ボタンで USB AUDIO / CW DECODER / SETUP の左側パネルを表示・非表示できます（各セクションは見出しクリックで折りたたみ、状態は保存されます）。画面幅 900px 以下ではオーバーレイ表示になります。
 
 PTT は既定で CAT (`TX1;`)。RTS/DTR 方式にする場合は SETUP で方式を選び、「PTTポート選択」で Standard COM Port を開きます。
 
@@ -42,13 +42,14 @@ PTT は既定で CAT (`TX1;`)。RTS/DTR 方式にする場合は SETUP で方式
 | MAIN / SUB 表示 | クリックで操作VFO切替（`VS`）。モード表示クリックで MODE ページ |
 | LCD 下段キー | MODE / BAND / FILTER / RX / TX / CW / CLAR。数値項目はタップで **FUNC ノブ** に割当 |
 | 左ノブ | AF / SQL（MAIN・SUB） |
+| TX キー | 押している間送信（SETUP の LATCH でクリック切替）。ダイヤルロックは LCD の VFO メニューの LOCK |
 | メーター | 送信中は PO + ALC/SWR/COMP/ID/VDD（クリックで切替） |
 | キーボード | ↑↓ 同調（Shift で×10）/ PageUp・Down バンド / Space 送信 |
 
 ### CW デコーダ
 
-CW パネル下段の **DECODE** で、USB AUDIO RX の受信音をデコードします（[CW Decoder 4](https://github.com/pokibon3/cw_decoder4) の WebAssembly 版を AudioWorklet で実行。ESP32 版と同じ DSP / デコーダ）。
-`US`/`JP` で欧文・和文、トーンボタンで AUTO（500〜1000Hz 自動同調）と手動 600〜1000Hz を切り替えます。入力チャンネル・入力ゲインは右側パネルの CW DECODER で設定します。
+CW モードのときだけ、CW 送信（左）と CW 受信（右）のパネルが表示されます。CW 受信パネルの **DECODE** で、USB AUDIO RX の受信音をデコードします（[CW Decoder 4](https://github.com/pokibon3/cw_decoder4) の WebAssembly 版を AudioWorklet で実行。ESP32 版と同じ DSP / デコーダ）。
+`US`/`JP` で欧文・和文、トーンボタンで AUTO（500〜1000Hz 自動同調）と手動 600〜1000Hz を切り替えます。入力チャンネル・入力ゲインは左側パネルの CW DECODER で設定します。
 
 安全のため、ウィンドウのフォーカスが外れると PTT は自動解除され、TOT（既定3分）で送信を打ち切ります。
 
