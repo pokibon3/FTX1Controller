@@ -760,20 +760,47 @@ function setupKeyboard() {
 }
 
 // ---------------- connection ----------------
-async function toggleConnect() {
+function onConnected(baud) {
+  $('#btnConnect').classList.remove('busy');
+  if (!audio.rx) startRxAudio({ quiet: true });
+  // ID answer: 0840 (CAT manual 2512-D; 0800 in 2508-C)
+  const notFtx1 = s.id && !['0800', '0840'].includes(s.id);
+  toast(`CAT接続しました（${baud}bps${notFtx1 ? ` / ID ${s.id}: FTX-1ではない可能性` : ''}）`, notFtx1);
+}
+async function toggleConnect(e) {
+  if (e?.shiftKey) ui.forcePick = true;
   if (!('serial' in navigator)) { toast('Web Serial 非対応のブラウザです', true); return; }
   if (radio.connected) { await setPtt(false); await radio.disconnect(); return; }
+  $('#btnConnect').classList.add('busy');
+  // POWER: reconnect to the port used last time (already granted, same USB IDs, same position) without the picker;
+  // Shift+click, or no answer from the remembered port, opens the picker
+  if (!ui.forcePick) {
+    try {
+      const ports = await navigator.serial.getPorts();
+      const same = ports.filter((p) => { const i = p.getInfo(); return cfg.catPort && i.usbVendorId === cfg.catPort.vid && i.usbProductId === cfg.catPort.pid; });
+      const order = [same[cfg.catPort?.idx], ...same].filter((p, i, a) => p && a.indexOf(p) === i);
+      for (const p of order) {
+        try {
+          const baud = await radio.connect(p, cfg.catBaud);
+          onConnected(baud);
+          return;
+        } catch {}
+      }
+    } catch {}
+  }
+  ui.forcePick = false;
   let port;
   try {
     port = await navigator.serial.requestPort();
-  } catch { return; } // picker cancelled
+  } catch { $('#btnConnect').classList.remove('busy'); return; } // picker cancelled
   try {
-    $('#btnConnect').classList.add('busy');
     const baud = await radio.connect(port, cfg.catBaud);
-    if (!audio.rx) startRxAudio({ quiet: true });
-    // ID answer: 0800 per the CAT manual (some firmware/Hamlib report 0840)
-    const notFtx1 = s.id && !['0800', '0840'].includes(s.id);
-    toast(`CAT接続しました（${baud}bps${notFtx1 ? ` / ID ${s.id}: FTX-1ではない可能性` : ''}）`, notFtx1);
+    const info = port.getInfo();
+    const same = (await navigator.serial.getPorts()).filter((p) => { const i = p.getInfo(); return i.usbVendorId === info.usbVendorId && i.usbProductId === info.usbProductId; });
+    cfg.catPort = { vid: info.usbVendorId, pid: info.usbProductId, idx: Math.max(0, same.indexOf(port)) };
+    save();
+    onConnected(baud);
+    return;
   } catch (e) {
     if (e.code === 'NO_REPLY') {
       toast(cfg.catBaud === 'auto'
