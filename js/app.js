@@ -1275,6 +1275,26 @@ $('#btnInstall').addEventListener('click', async () => {
   }
   toast('Chrome のメニュー（右上の ⋮）→「キャスト、保存、共有」→「ページをアプリとしてインストール」から入れてください。インストール済みの場合は chrome://apps から起動できます', false, 9000);
 });
+// Installed app: Chrome opens the first window at a default size that does not fit the panel. Size it to the
+// content once (later launches keep whatever size the user leaves it at).
+if (standalone()) {
+  let sized = false;
+  try { sized = localStorage.getItem('ftx1.winSized') === '1'; } catch {}
+  if (!sized) {
+    const fit = () => {
+      const chromeW = window.outerWidth - window.innerWidth, chromeH = window.outerHeight - window.innerHeight;
+      const w = Math.min(screen.availWidth, 1600 + chromeW);
+      window.resizeTo(w, window.outerHeight);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const h = Math.min(screen.availHeight, document.documentElement.scrollHeight + chromeH);
+        window.resizeTo(w, h);
+        window.moveTo(Math.max(0, (screen.availWidth - w) / 2), Math.max(0, (screen.availHeight - h) / 2));
+        try { localStorage.setItem('ftx1.winSized', '1'); } catch {}
+      }));
+    };
+    if (document.readyState === 'complete') fit(); else window.addEventListener('load', fit, { once: true });
+  }
+}
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
 }
