@@ -29,7 +29,7 @@ Finder から `start.command` をダブルクリックでも可。アドレス�
 3. ボーレートは既定で自動検出（38400 / 4800 / 9600 / 19200 / 115200 を `ID;` で順に試行）
 4. 左側パネルの USB AUDIO RX/TX で「USB Audio CODEC」を選択（自動選択されます）
 
-左上の **☰ SETUP** ボタンで USB AUDIO / CW DECODER / SETUP の左側パネルを表示・非表示できます（各セクションは見出しクリックで折りたたみ、状態は保存されます）。画面幅 900px 以下ではオーバーレイ表示になります。
+左上の **☰** ボタンで USB AUDIO / CW DECODER / SETUP の左側パネルを表示・非表示できます（各セクションは見出しクリックで折りたたみ、状態は保存されます）。画面幅 900px 以下ではオーバーレイ表示になります。
 
 PTT は既定で CAT (`TX1;`)。RTS/DTR 方式にする場合は SETUP で方式を選び、「PTTポート選択」で Standard COM Port を開きます。
 
@@ -40,8 +40,13 @@ PTT は既定で CAT (`TX1;`)。RTS/DTR 方式にする場合は SETUP で方式
 | メインダイヤル | ドラッグ回転（フライホイール付き）/ ホイール。STEP・MHz・FINE で刻み変更 |
 | 周波数の桁 | 桁の上でホイール → その桁を増減。選択中VFOの周波数クリック → 直接入力 |
 | MAIN / SUB 表示 | クリックで操作VFO切替（`VS`）。モード表示クリックで MODE ページ |
-| LCD 下段キー | MODE / BAND / FILTER / RX / TX / CW / CLAR。数値項目はタップで **FUNC ノブ** に割当 |
+| LCD 下段キー | 実機のスコープ画面と同じ D-MODE（CENTER/CURSOR/FIX）/ 3DSS⇔W/F / MULTI / SCOPE / SPAN / SPEED。D-MODE・3DSS・SPAN・SPEED は本体スコープを CAT（`SS`）で操作、MULTI はアプリの AF-FFT 表示の ON/OFF |
+| FUNC ノブ押し | ファンクションメニュー（マニュアルの順: SSB / CW、末尾に VFO 操作）。数値項目はタップで **FUNC ノブ** に割当 |
+| フィルター表示タッチ | WIDTH / SHIFT / NARROW / CONTOUR / APF / NOTCH |
+| N/W・MAG 長押し | MODE / BAND 選択 |
+| 上部キー | 実機と同じ GM / S-DX / PMG / MAG / N/W と ◢SPLIT / V/M / M▸V。◢ は押す: MAIN⇔SUB 入替（`SV`）・長押し: SPLIT、V/M は押す: `VM`・長押し: メモリー書込（`AM`）、M▸V は押す: `MA`・長押し: メモリーチューン。GM / S-DX / PMG は CAT 非対応 |
 | 左ノブ | AF / SQL（MAIN・SUB） |
+| CAT CONSOLE | SETUP の「CAT CONSOLE を表示」で表示（既定は非表示） |
 | TX キー | 押している間送信（SETUP の LATCH でクリック切替）。ダイヤルロックは LCD の VFO メニューの LOCK |
 | メーター | 送信中は PO + ALC/SWR/COMP/ID/VDD（クリックで切替） |
 | キーボード | ↑↓ 同調（Shift で×10）/ PageUp・Down バンド / Space 送信 |

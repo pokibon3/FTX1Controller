@@ -59,6 +59,7 @@
             <option value="auto" selected>自動検出</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option>
           </select>
         </div>
+        <label class="chk"><input type="checkbox" id="showConsole"> CAT CONSOLE を表示</label>
         <label class="chk"><input type="checkbox" id="pttLatch"> TX ボタンを LATCH（クリックで送受切替）</label>
         <div class="field"><label>PTT 方式</label>
           <select id="pttMethod">
@@ -91,14 +92,25 @@
   <main class="radio" id="radio">
     <!-- top edge keys (long flat keys with the legend printed below, as on the field head) -->
     <div class="top-edge">
-      <button class="tkey-cat tkey-menu" id="btnMenu" title="USB AUDIO / SETUP パネルの表示切替">&#9776; SETUP</button>
+      <button class="tkey-cat tkey-menu" id="btnMenu" title="USB AUDIO / CW DECODER / SETUP パネルの表示切替" aria-label="メニュー">&#9776;</button>
       <button class="tkey-cat" id="btnConnect" title="電源（CAT ポートに接続 / 切断）"><span class="tled"></span>POWER</button>
-      <div class="brand"><b>FTX-1 Controller</b><small class="ver" id="appVer"></small></div>
+      <!-- top edge as on the radio: five flat keys with legends below + the orange model print, then three keys -->
+      <div class="te-main">
+        <div class="te-keys">
+          <div class="tk"><button class="tbar" data-act="gm"></button><label>GM</label></div>
+          <div class="tk"><button class="tbar" data-act="sdx"></button><label>S-DX</label></div>
+          <div class="tk"><button class="tbar" data-act="pmg"></button><label>PMG<em>PW</em></label></div>
+          <div class="tk"><button class="tbar" data-act="band"></button><label>MAG<em>BAND</em></label></div>
+          <div class="tk"><button class="tbar" data-act="nw"></button><label>N/W<em>MODE</em></label></div>
+        </div>
+        <div class="silk"><span>HF/VHF/UHF ALL MODE TRANSCEIVER</span><b>FTX-1</b><small id="appVer"></small></div>
+      </div>
       <span class="te-gap"></span>
-      <div class="tk"><button class="tbar" data-act="band"></button><label>MAG<em>BAND</em></label></div>
-      <div class="tk"><button class="tbar" data-act="nw"></button><label>N/W<em>MODE</em></label></div>
-      <span class="te-gap2"></span>
-      <div class="tk tk-r"><button class="tbar" data-act="split" id="keySplit"></button><label><em>SPLIT</em></label></div>
+      <div class="te-right">
+        <button class="tkey" data-act="split" id="keySplit" title="押す: MAIN⇔SUB 入替 / 長押し: SPLIT"><i>◢</i><em>SPLIT</em></button>
+        <button class="tkey" data-act="vm" title="押す: VFO⇔メモリー / 長押し: メモリー書込"><b>V/M</b><em>MW</em></button>
+        <button class="tkey" data-act="mv" title="押す: メモリー→VFO / 長押し: メモリーチューン"><b>M▸V</b><em>MT</em></button>
+      </div>
     </div>
 
     <div class="head">
@@ -188,30 +200,30 @@
 
   <!-- ===== PC side deck ===== -->
   <section class="deck">
-    <div class="panel" id="panelCw">
-      <h2>CW <span class="tag tag-tx">TX</span><span class="tag" id="cwWpm">20 WPM</span></h2>
-      <textarea id="cwText" rows="3" placeholder="CQ CQ DE JA1XXX K" spellcheck="false"></textarea>
-      <div class="row">
+    <!-- CW TX / RX: same skeleton (header, text box, 7-column key row, hint) so both line up -->
+    <div class="panel cwp" id="panelCw">
+      <h2>CW <span class="tag tag-tx">TX</span><span class="h2-sp"></span><span class="tag" id="cwWpm">20 WPM</span></h2>
+      <textarea class="cw-box" id="cwText" placeholder="CQ CQ DE JA1XXX K" spellcheck="false"></textarea>
+      <div class="cw-keys" id="cwMem">
         <button class="btn" id="btnCwSend">SEND</button>
         <button class="btn" id="btnCwStop">STOP</button>
       </div>
-      <div class="row mem" id="cwMem"></div>
-      <p class="hint">M1–M5: クリックで送信 / Shift+クリックで現在の文を登録。CWモード・BK-IN ONで送出されます。</p>
+      <p class="hint">M1–M5: クリックで送信 / Shift+クリックで現在の文を登録。BK-IN ON で送出されます。</p>
     </div>
 
-    <div class="panel" id="panelDec">
-      <h2>CW <span class="tag">RX</span><span class="tag" id="decInfo">-- WPM</span></h2>
-      <div class="row">
-        <span class="dec-led" id="decLed" title="キー判定"></span>
+    <div class="panel cwp" id="panelDec">
+      <h2>CW <span class="tag">RX</span><span class="dec-led" id="decLed" title="キー判定"></span><span class="h2-sp"></span><span class="tag" id="decInfo">-- WPM</span></h2>
+      <div class="cw-box dec-text" id="decText"></div>
+      <div class="cw-keys">
         <button class="btn" id="btnDec" title="RX音声をデコード（USB AUDIO RX 開始中に動作）">DECODE</button>
         <button class="btn" id="btnDecMode" title="欧文 / 和文">US</button>
         <button class="btn" id="btnDecTone" title="トーン: AUTO → 600〜1000Hz 手動">AUTO</button>
         <button class="btn" id="btnDecClr">CLR</button>
       </div>
-      <div class="dec-text" id="decText"></div>
+      <p class="hint">US/JP: 欧文・和文 / AUTO: 500〜1000Hz に自動同調（押すごとに 600〜1000Hz 手動）。</p>
     </div>
 
-    <div class="panel panel-wide" id="panelConsole">
+    <div class="panel panel-wide" id="panelConsole" hidden>
       <h2>CAT CONSOLE <span class="tag" id="catErr">ERR 0</span></h2>
       <div class="log" id="log"></div>
       <div class="row">

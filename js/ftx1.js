@@ -114,7 +114,9 @@ function initialState() {
     apf: [false, false], apfOfs: [0, 0],
     att: false, preamp: [0, 0, 0], agc: [4, 4],
     shiftOn: [false, false], shift: [0, 0], width: [0, 0],
-    lock: false, tuner: false,
+    lock: false, tuner: false, spot: false,
+    // radio's own spectrum scope (SS P2 -> P3): 0 SPEED, 5 SPAN, 6 MODE
+    scope: { 0: '2', 5: '6', 6: '0' },
     clarRx: [false, false], clarTx: [false, false], clarOfs: [0, 0],
     errors: 0, lastRx: 0,
   };
@@ -252,7 +254,7 @@ export class FTX1 extends EventTarget {
     ['ID;', 'FA;', 'FB;', 'MD0;', 'MD1;', 'VS;', 'FT;', 'FR;', 'TX;',
       'AG0;', 'AG1;', 'RG0;', 'RG1;', 'SQ0;', 'SQ1;', 'PC;', 'MG;', 'KS;', 'KP;', 'BI;', 'VX;', 'VG;', 'ML;',
       'NL0;', 'NL1;', 'RL0;', 'RL1;', 'NA0;', 'NA1;', 'BC0;', 'BC1;', 'BP00;', 'BP01;', 'CO00;', 'CO01;', 'CO02;', 'CO03;',
-      'RA0;', 'PA0;', 'PA1;', 'PA2;', 'GT0;', 'GT1;', 'IS0;', 'IS1;', 'SH0;', 'SH1;', 'LK;', 'AC;',
+      'RA0;', 'PA0;', 'PA1;', 'PA2;', 'GT0;', 'GT1;', 'IS0;', 'IS1;', 'SH0;', 'SH1;', 'LK;', 'AC;', 'CS;', 'SS00;', 'SS05;', 'SS06;',
       'CF000;', 'CF001;', 'CF100;', 'CF101;', 'AI;'].forEach((c) => this.send(c));
   }
 
@@ -375,6 +377,8 @@ export class FTX1 extends EventTarget {
         break;
       case 'SH': if (ok('SH' + v)) s.width[v] = num(2, 4); break;
       case 'LK': if (ok('LK')) s.lock = p[0] === '1'; break;
+      case 'CS': if (ok('CS')) s.spot = p[0] === '1'; break;
+      case 'SS': if (p[0] === '0' && p[1] in s.scope && p[2] && ok('SS' + p[1])) s.scope[p[1]] = p[2]; break;
       case 'AC': if (ok('AC')) s.tuner = !!p[2] && p[2] !== '0'; break;
       case 'CF':
         if (p[2] === '0' && ok('CFs' + v)) { s.clarRx[v] = p[3] === '1'; s.clarTx[v] = p[4] === '1'; }
@@ -453,6 +457,15 @@ export class FTX1 extends EventTarget {
     });
   }
   setWidth(vfo, code) { code = clamp(code, 0, widthMax(this.s.mode[vfo])); this._set('SH' + vfo, `SH${vfo}0${pad(code, 2)};`, () => { this.s.width[vfo] = code; }); }
+  setSpot(on) { this._set('CS', `CS${on ? 1 : 0};`, () => { this.s.spot = on; }); }
+  zeroIn(vfo) { this.send(`ZI${vfo};`); }
+  // SS P1=0 P2 P3 P4-P7=0000 (P2: 0 SPEED, 5 SPAN, 6 MODE)
+  setScope(item, code) { this._set('SS' + item, `SS0${item}${code}0000;`, () => { this.s.scope[item] = String(code); }); }
+  // memory keys: [V/M] (VM), MAIN -> memory write (AM), memory -> MAIN VFO (MA), memory tune (VM P2=10)
+  vmKey() { this.send('VM;'); this._refreshVfo(0); }
+  memWrite() { this.send('AM;'); }
+  memToVfo() { this.send('MA;'); this._refreshVfo(0); }
+  memTune(vfo = 0) { this.send(`VM${vfo}10;`); this._refreshVfo(vfo); }
   setLock(on) { this._set('LK', `LK${on ? 1 : 0};`, () => { this.s.lock = on; }); }
   selectVFO(v) { this._set('VS', `VS${v};`, () => { this.s.vs = v; }); }
   setTxVFO(v) { this._set('FT', `FT${v};`, () => { this.s.ft = v; }); }

@@ -29,7 +29,7 @@ const DEFAULTS = {
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'ud',
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
-  sidebar: true, sections: {}, dec: true, decCh: 'L', decGain: 0,
+  sidebar: true, sections: {}, afFft: true, dec: true, decCh: 'L', decGain: 0, console: false,
 };
 const cfg = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
@@ -156,7 +156,59 @@ const onOff = (b) => (b ? 'ON' : 'OFF');
 
 const METERS = { 5: 'PO', 3: 'COMP', 4: 'ALC', 8: 'VDD', 7: 'ID', 6: 'SWR' };
 
+// radio scope (SS) codes; MODE codes combine the display type with CENTER/CURSOR/FIX
+const SC_DMODE = ['CENTER', 'CURSOR', 'FIX'];
+const SC_MODE_CODE = { '3DSS': ['0', '1', '2'], 'W/F': ['4', '7', 'A'] };
+const scopeType = () => (['4', '7', 'A'].includes(s.scope[6]) ? 'W/F' : '3DSS');
+const scopeDmode = () => Math.max(0, SC_MODE_CODE[scopeType()].indexOf(s.scope[6]));
+const setScopeMode = (type, dmode) => radio.setScope(6, SC_MODE_CODE[type][dmode]);
+const SC_SPAN = { 2: '5k', 3: '10k', 4: '20k', 5: '50k', 6: '100k', 7: '200k', 8: '500k', 9: '1M' };
+const SC_SPEED = ['SLOW1', 'SLOW2', 'FAST1', 'FAST2', 'FAST3', 'STOP'];
+
 const SCREENS = {
+  // [FUNC] knob press: function menu in the manual's order (SSB page, then CW page).
+  // Items the CAT protocol cannot reach are left out; VFO items at the end are this app's additions.
+  FUNCTION: {
+    items: () => [
+      { section: 'SSB' },
+      { label: 'ATT', value: () => onOff(s.att), on: () => s.att, act: () => radio.setAtt(!s.att) },
+      { label: () => (bandType(s.freq[V()]) ? 'AMP' : 'IPO'), value: () => preampText(), on: () => preampVal() > 0, act: () => cyclePreamp() },
+      { label: 'DNF', value: () => onOff(s.bc[V()]), on: () => s.bc[V()], act: () => radio.setBeatCancel(V(), !s.bc[V()]) },
+      { label: 'AGC', value: () => AGC[s.agc[V()]], act: () => radio.setAGC(V(), (s.agc[V()] + 1) % 5) },
+      { label: 'ANT TUNE', value: () => 'START', act: () => radio.tune() },
+      { label: 'TUNER', value: () => onOff(s.tuner), on: () => s.tuner, act: () => radio.setTuner(!s.tuner) },
+      { label: 'NB', func: 'nb', on: () => s.nb[V()] > 0, act: () => radio.setNB(V(), s.nb[V()] ? 0 : (ui.lastNb || 5)) },
+      { label: 'DNR', func: 'nr', on: () => s.nr[V()] > 0, act: () => radio.setNR(V(), s.nr[V()] ? 0 : (ui.lastNr || 5)) },
+      { label: 'RF POWER', func: 'power' },
+      { label: 'MIC GAIN', func: 'mic' },
+      { label: 'VOX', value: () => onOff(s.vox), on: () => s.vox, act: () => radio.setVox(!s.vox) },
+      { label: 'VOX GAIN', func: 'voxGain' },
+      { section: 'CW' },
+      { label: 'MONI LEVEL', func: 'moni', on: () => s.moniOn, act: () => radio.setMonitorOn(!s.moniOn) },
+      { label: 'BK-IN', value: () => onOff(s.bkin), on: () => s.bkin, act: () => radio.setBreakIn(!s.bkin) },
+      { label: 'CW SPEED', func: 'ks' },
+      { label: 'CW PITCH', func: 'kp' },
+      { label: 'ZIN', value: () => 'ZERO IN', act: () => radio.zeroIn(V()) },
+      { label: 'CW SPOT', value: () => onOff(s.spot), on: () => s.spot, act: () => radio.setSpot(!s.spot) },
+      { section: 'VFO' },
+      { label: 'MAIN⇔SUB', value: () => 'VS', act: () => radio.selectVFO(1 - s.vs) },
+      { label: 'A⇄B', value: () => 'SWAP', act: () => radio.swap() },
+      { label: 'A▸B', value: () => 'COPY', act: () => radio.copyAtoB() },
+      { label: 'B▸A', value: () => 'COPY', act: () => radio.copyBtoA() },
+      { label: 'DUAL RX', value: () => onOff(s.dual), on: () => s.dual, act: () => radio.setDual(!s.dual) },
+      { label: 'LOCK', value: () => onOff(s.lock), on: () => s.lock, act: () => radio.setLock(!s.lock) },
+      { label: 'CLAR', func: 'clar', on: () => s.clarRx[V()] || s.clarTx[V()] },
+      { label: 'DIAL STEP', value: () => (cfg.step === 'auto' ? 'AUTO' : stepText(cfg.step)), act: () => ACTIONS.step() },
+      { label: 'RF GAIN', func: 'rf' },
+      { label: 'SQL', func: 'sql' },
+    ],
+  },
+  SPAN: {
+    items: () => Object.entries(SC_SPAN).map(([c, t]) => ({ label: t, cur: () => s.scope[5] === c, act: () => radio.setScope(5, c), close: true })),
+  },
+  SPEED: {
+    items: () => SC_SPEED.map((t, i) => ({ label: t, cur: () => s.scope[0] === String(i), act: () => radio.setScope(0, i), close: true })),
+  },
   MODE: {
     key: () => MODE_NAME[s.mode[V()]] || '---',
     items: () => MODES.map((m) => ({ label: m.name, cur: () => s.mode[V()] === m.code, act: () => radio.setMode(V(), m.code), close: true })),
@@ -178,57 +230,6 @@ const SCREENS = {
       { label: 'NOTCH', func: 'notch', on: () => s.notch[V()], act: () => radio.setNotch(V(), !s.notch[V()]) },
     ],
   },
-  'RX DSP': {
-    key: () => [s.nb[V()] && 'NB', s.nr[V()] && 'DNR'].filter(Boolean).join(' ') || '---',
-    items: () => [
-      { label: 'NB', func: 'nb', on: () => s.nb[V()] > 0, act: () => radio.setNB(V(), s.nb[V()] ? 0 : (ui.lastNb || 5)) },
-      { label: 'DNR', func: 'nr', on: () => s.nr[V()] > 0, act: () => radio.setNR(V(), s.nr[V()] ? 0 : (ui.lastNr || 5)) },
-      { label: 'DNF', value: () => onOff(s.bc[V()]), on: () => s.bc[V()], act: () => radio.setBeatCancel(V(), !s.bc[V()]) },
-      { label: 'ATT', value: () => onOff(s.att), on: () => s.att, act: () => radio.setAtt(!s.att) },
-      { label: () => (bandType(s.freq[V()]) ? 'AMP' : 'IPO'), value: () => preampText(), on: () => preampVal() > 0, act: () => cyclePreamp() },
-      { label: 'AGC', value: () => AGC[s.agc[V()]], act: () => radio.setAGC(V(), (s.agc[V()] + 1) % 5) },
-      { label: 'RF GAIN', func: 'rf' },
-      { label: 'SQL', func: 'sql' },
-      { label: 'AF GAIN', func: 'af' },
-    ],
-  },
-  TX: {
-    key: () => `${s.power}W`,
-    items: () => [
-      { label: 'RF POWER', func: 'power' },
-      { label: 'MIC GAIN', func: 'mic' },
-      { label: 'VOX', value: () => onOff(s.vox), on: () => s.vox, act: () => radio.setVox(!s.vox) },
-      { label: 'VOX GAIN', func: 'voxGain' },
-      { label: 'MONI', func: 'moni', on: () => s.moniOn, act: () => radio.setMonitorOn(!s.moniOn) },
-      { label: 'TUNER', value: () => onOff(s.tuner), on: () => s.tuner, act: () => radio.setTuner(!s.tuner) },
-      { label: 'ANT TUNE', value: () => 'START', act: () => radio.tune() },
-    ],
-  },
-  CW: {
-    key: () => `${s.ks}wpm`,
-    items: () => [
-      { label: 'CW SPEED', func: 'ks' },
-      { label: 'CW PITCH', func: 'kp' },
-      { label: 'BK-IN', value: () => onOff(s.bkin), on: () => s.bkin, act: () => radio.setBreakIn(!s.bkin) },
-      { label: 'CW-U', cur: () => s.mode[V()] === '3', act: () => radio.setMode(V(), '3') },
-      { label: 'CW-L', cur: () => s.mode[V()] === '7', act: () => radio.setMode(V(), '7') },
-    ],
-  },
-  VFO: {
-    key: () => (isSplit() ? 'SPLIT' : s.dual ? 'DUAL' : 'SINGLE'),
-    items: () => [
-      { label: 'MAIN⇔SUB', value: () => 'VS', act: () => radio.selectVFO(1 - s.vs) },
-      { label: 'A⇄B', value: () => 'SWAP', act: () => radio.swap() },
-      { label: 'A▸B', value: () => 'COPY', act: () => radio.copyAtoB() },
-      { label: 'B▸A', value: () => 'COPY', act: () => radio.copyBtoA() },
-      { label: 'SPLIT', value: () => onOff(isSplit()), on: isSplit, act: toggleSplit },
-      { label: 'DUAL RX', value: () => onOff(s.dual), on: () => s.dual, act: () => radio.setDual(!s.dual) },
-      { label: 'LOCK', value: () => onOff(s.lock), on: () => s.lock, act: () => radio.setLock(!s.lock) },
-      { label: 'CLAR', func: 'clar', on: () => s.clarRx[V()] || s.clarTx[V()] },
-      { label: 'DIAL STEP', value: () => (cfg.step === 'auto' ? 'AUTO' : stepText(cfg.step)), act: () => ACTIONS.step() },
-      { label: 'F.INPUT', value: () => 'KEYPAD', act: () => { closePop(); openEntry(0); } },
-    ],
-  },
   METER: {
     key: () => METERS[cfg.meterSel],
     items: () => Object.entries(METERS).map(([k, name]) => ({
@@ -246,6 +247,13 @@ function openPop(name, target = null) {
   const grid = $('#popGrid');
   grid.innerHTML = '';
   popItems = SCREENS[name].items().map((it) => {
+    if (it.section) {
+      const h = document.createElement('div');
+      h.className = 'ph';
+      h.textContent = it.section;
+      grid.appendChild(h);
+      return null;
+    }
     const el = document.createElement('button');
     el.className = 'pt';
     el.innerHTML = '<b></b><span></span>';
@@ -257,7 +265,7 @@ function openPop(name, target = null) {
     });
     grid.appendChild(el);
     return { it, el, b: el.firstChild, span: el.lastChild };
-  });
+  }).filter(Boolean);
   $('#pop').hidden = false;
   render();
 }
@@ -277,18 +285,31 @@ function updatePop() {
   }
 }
 
+// bottom touch keys of the scope screen (manual p.28-30, product photo):
+// D-MODE / 3DSS / SPAN / SPEED drive the radio's own scope over CAT (SS); MULTI shows/hides this app's AF-FFT;
+// SCOPE MAIN/SUB follows the operated side (the CAT protocol has no scope-side command).
+const SOFT_KEYS = [
+  { name: 'D-MODE', key: () => SC_DMODE[scopeDmode()], act: () => setScopeMode(scopeType(), (scopeDmode() + 1) % 3) },
+  { name: () => scopeType(), key: () => '', act: () => setScopeMode(scopeType() === '3DSS' ? 'W/F' : '3DSS', scopeDmode()) },
+  { name: 'MULTI', key: () => (cfg.afFft ? 'AF-FFT' : ''), act: () => { cfg.afFft = !cfg.afFft; save(); } },
+  { name: 'SCOPE', key: () => side(s.vs), act: () => radio.selectVFO(1 - s.vs) },
+  { name: 'SPAN', key: () => SC_SPAN[s.scope[5]] || '', pop: 'SPAN' },
+  { name: 'SPEED', key: () => SC_SPEED[+s.scope[0]] || '', pop: 'SPEED' },
+];
 let softKeys = [];
 function setupSoftbar() {
   const bar = $('#softbar');
-  softKeys = Object.keys(SCREENS).map((name) => {
+  softKeys = SOFT_KEYS.map((k) => {
     const el = document.createElement('button');
     el.className = 'sk';
-    el.innerHTML = `<b>${name}</b><span></span>`;
-    el.addEventListener('click', () => openPop(name));
+    el.innerHTML = '<b></b><span></span>';
+    el.addEventListener('click', () => { if (k.pop) openPop(k.pop); else { k.act(); render(); } });
     bar.appendChild(el);
-    return { name, el, span: el.lastChild };
+    return { k, el, b: el.firstChild, span: el.lastChild };
   });
   $('#popClose').addEventListener('click', closePop);
+  // touching the filter display opens the filter functions (manual p.23)
+  for (let v = 0; v < 2; v++) $(`#filt${v}`).addEventListener('click', () => openPop('FILTER', v));
 }
 
 // ---------------- bands: frequency, tags, receiver settings ----------------
@@ -304,13 +325,26 @@ function freqHtml(hz) {
   for (let i = 6; i < 9; i++) hzs += d(i);
   return `${mhz}<span class="dot">.</span>${khz}<span class="sm"><span class="dot">.</span>${hzs}</span>`;
 }
-function fitFreq(v) {
-  const el = $(`#freq${v}`);
-  el.style.fontSize = '';
-  const avail = el.parentElement.clientWidth;
-  if (el.scrollWidth > avail && avail > 0) {
-    el.style.fontSize = `${(parseFloat(getComputedStyle(el).fontSize) * avail) / el.scrollWidth * 0.98}px`;
+// One size for MAIN and SUB, fitted to the widest possible reading (3 MHz digits),
+// so the digits never shrink when the frequency gains a digit and both sides always match.
+function fitFreq() {
+  let size = Infinity;
+  const els = [$('#freq0'), $('#freq1')];
+  for (const el of els) {
+    el.style.fontSize = '';
+    const box = el.parentElement;
+    if (!box.offsetParent || !box.clientWidth) continue; // hidden band (single layout)
+    const probe = el.cloneNode(false);
+    probe.removeAttribute('id');
+    probe.style.cssText = 'position:absolute;visibility:hidden;';
+    probe.innerHTML = freqHtml(888888888);
+    box.appendChild(probe);
+    const base = parseFloat(getComputedStyle(probe).fontSize);
+    const w = probe.scrollWidth;
+    probe.remove();
+    size = Math.min(size, w > box.clientWidth ? (base * box.clientWidth) / w * 0.98 : base);
   }
+  if (Number.isFinite(size)) els.forEach((el) => { el.style.fontSize = `${size}px`; });
 }
 
 const RX_TILES = [
@@ -346,7 +380,7 @@ function setupBands() {
       rx.appendChild(el);
       rxTileEls[v].push({ t, el, b: el.firstChild, span: el.lastChild });
     });
-    new ResizeObserver(() => fitFreq(v)).observe(band);
+    new ResizeObserver(() => fitFreq()).observe(band);
   }
   $('#funcBox').addEventListener('click', () => popup(val(PARAMS[cfg.func].name), paramText(cfg.func), paramFrac(cfg.func)));
   document.fonts?.ready.then(() => { fitFreq(0); fitFreq(1); });
@@ -476,7 +510,7 @@ function setupKnobs() {
   const func = new Knob($('#knFunc'), {
     pxPerStep: 6,
     onTurn: (n) => { adjust(cfg.func, n); func.showFree(); },
-    onPress: () => openPop('RX DSP'),
+    onPress: () => openPop('FUNCTION'),
   });
 
   const sub = new Knob($('#knSubDial'), {
@@ -579,7 +613,14 @@ const ACTIONS = {
   },
   band: { press: () => bandStep(true), hold: () => openPop('BAND') },
   nw: { press: () => radio.setNarrow(V(), !s.nar[V()]), hold: () => openPop('MODE') },
-  split: toggleSplit,
+  // ◢ key: press swaps MAIN/SUB (SV), hold toggles SPLIT (manual: SPLIT is the long press)
+  split: { press: () => radio.swap(), hold: toggleSplit },
+  vm: { press: () => radio.vmKey(), hold: () => { radio.memWrite(); popup('MW', 'MEMORY WRITE', 1); } },
+  mv: { press: () => radio.memToVfo(), hold: () => { radio.memTune(0); popup('MT', 'MEMORY TUNE', 1); } },
+  // no CAT command exists for these
+  gm: () => toast('GM は CAT では操作できません'),
+  sdx: () => toast('S-DX は CAT では操作できません'),
+  pmg: () => toast('PMG は CAT では操作できません'),
   swap: () => radio.swap(),
   aToB: () => radio.copyAtoB(),
   clar: {
@@ -750,7 +791,7 @@ function setupCw() {
     $('#btnCwSend').classList.remove('on');
     radio.stopCW();
   });
-  const mem = $('#cwMem');
+  const mem = $('#cwMem'); // shares the key row with SEND / STOP
   cfg.cwMem.forEach((txt, i) => {
     const b = document.createElement('button');
     b.className = 'btn';
@@ -890,6 +931,10 @@ function setupSettings() {
   bindSel('tot', 'tot');
   bindSel('scopeSpan', 'scopeSpan', () => { scope.span = +cfg.scopeSpan; });
   scope.span = +cfg.scopeSpan;
+  const con = $('#showConsole');
+  con.checked = cfg.console;
+  $('#panelConsole').hidden = !cfg.console;
+  con.addEventListener('change', () => { cfg.console = con.checked; $('#panelConsole').hidden = !cfg.console; save(); });
   $('#btnPttPort').addEventListener('click', togglePttPort);
   $('#btnConnect').addEventListener('click', toggleConnect);
 }
@@ -1011,7 +1056,9 @@ function draw() {
     band.classList.toggle('sel', s.vs === v);
     band.querySelector('.b-mode').textContent = MODE_NAME[s.mode[v]] || '---';
     const html = freqHtml(s.freq[v]);
-    if (html !== lastFreqHtml[v]) { $(`#freq${v}`).innerHTML = html; lastFreqHtml[v] = html; fitFreq(v); }
+    if (html !== lastFreqHtml[v]) { $(`#freq${v}`).innerHTML = html; lastFreqHtml[v] = html; }
+    // the transmitting side's frequency turns red, as on the radio
+    $(`#freq${v}`).classList.toggle('tx', (s.tx || ui.ptt) && s.ft === v);
     const tr = $(`#txrx${v}`);
     const rxOn = v === s.vs || s.dual;
     tr.textContent = s.ft === v ? (s.tx ? 'TX' : 'TXRX') : 'RX';
@@ -1027,9 +1074,11 @@ function draw() {
   drawFilters();
   updatePop();
   for (const sk of softKeys) {
-    sk.span.textContent = SCREENS[sk.name].key();
-    sk.el.classList.toggle('open', ui.pop === sk.name);
+    sk.b.textContent = val(sk.k.name);
+    sk.span.textContent = sk.k.key();
+    sk.el.classList.toggle('open', !!sk.k.pop && ui.pop === sk.k.pop);
   }
+  $('#scope').style.visibility = cfg.afFft ? '' : 'hidden';
 
   for (const { k, v } of afKnobs) {
     const kind = knobMode(v);
@@ -1041,7 +1090,9 @@ function draw() {
   $('#keyFine').classList.toggle('on', ui.fine || ui.fast);
   $('#keyClar').classList.toggle('on', s.clarRx[0] || s.clarTx[0]);
   // VFO mode indicator arcs: blue = VFO, red = clarifier. BUSY/TX: red on TX, green with signal above squelch
-  $('#vfoArc').className = `vfo-arc ${conn ? (s.clarRx[0] || s.clarTx[0] ? 'red' : 'blue') : ''}`;
+  // VFO mode indicator (manual): blue = MAIN side, green = SUB side, red = clarifier or split
+  const clarOn = s.clarRx[s.vs] || s.clarTx[s.vs];
+  $('#vfoArc').className = `vfo-arc ${conn ? (clarOn || isSplit() ? 'red' : s.vs ? 'green' : 'blue') : ''}`;
   for (let v = 0; v < 2; v++) {
     const busy = !s.tx && (v === 0 || s.dual) && s.smeter[v] > Math.max(12, s.sql[v] / 2);
     $(`#ledBusy${v}`).className = s.tx && s.ft === v ? 'red' : busy ? 'green' : '';

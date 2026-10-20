@@ -92,6 +92,7 @@ export class FtxMeter {
       }
     }
 
+    let lastLabel = null;
     for (const [label, raw, minor] of sc.ticks) {
       const a = this._angle(g, raw);
       const p = this._hit(g, arc, a);
@@ -109,7 +110,9 @@ export class FtxMeter {
       c.font = `italic 700 ${fs}px ${FONT}`;
       c.textAlign = 'center';
       c.textBaseline = 'alphabetic';
-      c.fillText(label, p.x + ux * len * 1.3, p.y + uy * len * 1.3 - H * 0.02);
+      const lx = p.x + ux * len * 1.3, ly = p.y + uy * len * 1.3 - H * 0.02;
+      c.fillText(label, lx, ly);
+      lastLabel = { x: lx + c.measureText(label).width / 2, y: ly };
     }
 
     // scale name at the far left (big italic "S", smaller "PO"/"ALC" ...)
@@ -127,6 +130,8 @@ export class FtxMeter {
       c.font = `italic 700 ${fs * (sc.unitAbove ? 0.85 : 1.05)}px ${FONT}`;
       c.textAlign = sc.unitAbove ? 'center' : 'left';
       if (sc.unitAbove) c.fillText(sc.unit, last.x - H * 0.05, last.y - H * 0.34);
+      // right of the last tick label on its baseline, so it never overlaps the "15" / "10" figures
+      else if (lastLabel) c.fillText(sc.unit, Math.max(last.x + H * 0.03, lastLabel.x + fs * 0.2), lastLabel.y);
       else c.fillText(sc.unit, last.x + H * 0.03, last.y + H * 0.02);
     }
   }
