@@ -10,6 +10,9 @@
   --text-dim: #8a929c;
   --lcd-cyan: #5aa9f0;
   --freq-font: "Saira", "DIN Alternate", "Arial Narrow", sans-serif;
+  /* frequency digits: wide rounded-square figures like the radio's TFT (compared against the manual's
+     pictures, Play bold slanted 10 deg was the closest freely available face) */
+  --digit-font: "Play", "Saira", "DIN Alternate", sans-serif;
   --font-ui: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
   color-scheme: dark;
 }
@@ -21,7 +24,7 @@ body {
   color: var(--text);
   font-family: var(--font-ui);
   min-height: 100vh;
-  padding: 20px 16px 40px;
+  padding: 20px 16px 48px;
   -webkit-font-smoothing: antialiased;
 }
 button { font: inherit; color: inherit; }
@@ -42,7 +45,7 @@ button { font: inherit; color: inherit; }
 #app.nomenu #sidebar { display: none; }
 #mainCol { grid-area: main; min-width: 0; container: main / inline-size; }
 #sidebar {
-  grid-area: side; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto;
+  grid-area: side; position: sticky; top: 12px; max-height: calc(100vh - 24px - 26px); overflow-y: auto;
   background: var(--panel); border: 1px solid var(--panel-line); border-radius: 12px; padding: 4px 14px 12px;
 }
 #sidebar details { border-bottom: 1px solid var(--panel-line); padding: 2px 0 12px; }
@@ -69,37 +72,41 @@ button { font: inherit; color: inherit; }
 
 /* top edge keys */
 .top-edge {
-  display: flex; align-items: flex-start; gap: 14px; height: 62px; padding: 6px 30px 0;
+  display: flex; align-items: center; gap: 14px; height: 46px; padding: 2px 30px 0;
   margin: 0 -20px; border-radius: 38px 38px 0 0;
   background: linear-gradient(180deg, #4a4d52, #2c2e32);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 3px 6px rgba(0,0,0,.5);
 }
 .te-gap { flex: 1; }
-.te-main { display: flex; flex-direction: column; gap: 3px; margin-left: 10px; }
+.te-main { display: flex; margin-left: 10px; }
 .te-keys { display: flex; gap: 14px; }
 .te-keys .tbar { width: 104px; }
 /* red model print under the keys (starts under S-DX, as on the radio) */
 .silk {
-  display: flex; align-items: baseline; gap: 8px; padding-left: 118px; margin-top: 1px;
+  display: flex; align-items: baseline; justify-content: center; gap: .8em; grid-column: 1 / -1;
   font-family: var(--freq-font); font-style: italic; font-weight: 800; font-variation-settings: "wdth" 125;
-  font-size: 10.5px; letter-spacing: 1.1px; color: #e8492a; white-space: nowrap; line-height: 1;
-  text-shadow: 0 0 1px rgba(232,73,42,.35);
+  font-size: 13px; letter-spacing: .09em; color: #e8492a; white-space: nowrap; line-height: 1;
+  text-shadow: 0 0 1px rgba(232,73,42,.35); pointer-events: none;
 }
-.silk b { font-size: 14px; font-weight: 800; letter-spacing: 1.5px; }
-.silk i { font-size: 11px; letter-spacing: 1px; }
-.silk small { font-size: 9px; font-weight: 700; letter-spacing: .5px; font-variant-numeric: tabular-nums; }
+.silk b { font-size: 1.36em; font-weight: 800; letter-spacing: .1em; }
+.silk i { font-size: 1.07em; letter-spacing: .08em; }
+.silk small { font-size: .86em; font-weight: 700; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
 /* three keys at the right end */
 .te-right { display: flex; gap: 10px; }
 .tkey {
-  width: 96px; height: 20px; border: 0; border-radius: 5px 5px 9px 9px; cursor: pointer;
+  width: 96px; height: 29px; border: 0; border-radius: 6px 6px 10px 10px; cursor: pointer;
   background: linear-gradient(180deg, #55585e, #1f2023);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 0 0 1px #050506, 0 2px 3px rgba(0,0,0,.7);
 }
 .tkey:active { transform: translateY(1px); }
 .tkey.on { box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 0 0 1px #050506, 0 0 8px rgba(255,159,26,.6); }
 .tk { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* legends printed on the key face: the label sits on top of its key (clicks pass through to the key) */
+.te-keys .tk, .te-right .tk { display: grid; place-items: center; }
+.te-keys .tk > *, .te-right .tk > * { grid-area: 1 / 1; }
+.te-keys .tk label, .te-right .tk label { z-index: 1; pointer-events: none; text-shadow: 0 1px 1px rgba(0,0,0,.8); }
 .tbar {
-  width: 128px; height: 18px; border: 0; border-radius: 9px 9px 4px 4px; cursor: pointer;
+  width: 128px; height: 29px; border: 0; border-radius: 10px 10px 6px 6px; cursor: pointer;
   background: linear-gradient(180deg, #55585e, #1c1d20);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 0 0 1px #050506, 0 2px 3px rgba(0,0,0,.7);
 }
@@ -128,7 +135,7 @@ button { font: inherit; color: inherit; }
 .kw { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .kw label { font-size: 12px; font-weight: 800; letter-spacing: .3px; color: #eef0f3; white-space: nowrap; text-align: center; line-height: 1.15; }
 .kw label b { display: inline-block; font-size: 8px; padding: 0 3px; border: 1px solid #c9ced6; border-radius: 3px; font-weight: 700; vertical-align: 2px; }
-.kw label em { display: block; font-style: normal; font-size: 9px; color: var(--accent); }
+.kw label em { display: none; }
 .knob {
   position: relative; border-radius: 50%; cursor: grab; touch-action: none; outline: none;
   background: repeating-conic-gradient(#303236 0 2.5deg, #0b0c0d 2.5deg 5deg);
@@ -249,10 +256,10 @@ button { font: inherit; color: inherit; }
   box-shadow: 0 0 0 6px #050506, 0 0 0 8px #2a2c30, 0 0 0 9px #050506;
   font-family: var(--font-ui);
 }
-.lcd.lay-ud { grid-template-rows: 4.4cqi 1fr 1fr 7.4cqi; grid-template-areas: "st st" "b0 b0" "b1 b1" "sb sb"; }
+.lcd.lay-ud { grid-template-rows: 3.2cqi 1fr 1fr 7cqi; grid-template-areas: "st st" "b0 b0" "b1 b1" "sb sb"; }
 .lcd.lay-ud .scope { display: none; }
-.lcd.lay-lr { grid-template-rows: 4.4cqi auto 1fr 7.4cqi; grid-template-areas: "st st" "b1 b0" "sc sc" "sb sb"; }
-.lcd.lay-single { grid-template-rows: 4.4cqi auto 1fr 7.4cqi; grid-template-areas: "st st" "b0 b0" "sc sc" "sb sb"; }
+.lcd.lay-lr { grid-template-rows: 3.2cqi auto 1fr 7cqi; grid-template-areas: "st st" "b1 b0" "sc sc" "sb sb"; }
+.lcd.lay-single { grid-template-rows: 3.2cqi auto 1fr 7cqi; grid-template-areas: "st st" "b0 b0" "sc sc" "sb sb"; }
 .lcd.lay-single.only-sub #band0 { display: none; }
 .lcd.lay-single.only-sub #band1 { grid-area: b0; }
 .lcd.lay-single:not(.only-sub) #band1 { display: none; }
@@ -272,10 +279,12 @@ button { font: inherit; color: inherit; }
 
 .band {
   position: relative; min-height: 0; padding: .6cqi 1.2cqi .4cqi; cursor: default;
-  display: grid; column-gap: 1.4cqi; row-gap: .3cqi;
-  grid-template-columns: 38cqi minmax(0, 1fr) auto;
-  grid-template-rows: 3.2cqi minmax(0, 1fr) 7cqi;
-  grid-template-areas: "tags . side" "meter freq side" "rx filt filt";
+  /* U/D and single screens (manual p.18): left = tags / meter / ATT-IPO-DNF-AGC tiles,
+     right = mode box, TX/RX badge at the right end, large frequency, filter window */
+  display: grid; column-gap: 1.4cqi; row-gap: .4cqi;
+  grid-template-columns: 54cqi minmax(0, 1fr);
+  grid-template-rows: 2.8cqi minmax(0, 1fr) 8cqi;
+  grid-template-areas: "tags mode" "meter freq" "rx filt";
 }
 #band0 { grid-area: b0; }
 #band1 { grid-area: b1; border-top: .15cqi solid #1f2124; }
@@ -285,7 +294,11 @@ button { font: inherit; color: inherit; }
 .tg-vfo { background: #2c8ae8; }
 .band.sel .tg-side { box-shadow: 0 0 0 .2cqi #fff; }
 
-.b-side { grid-area: side; display: flex; flex-direction: column; align-items: flex-end; gap: .6cqi; }
+.b-side { display: contents; }
+.b-mode { grid-area: mode; justify-self: end; align-self: start; }
+.b-txrx { grid-area: freq; justify-self: end; align-self: start; z-index: 1; }
+/* the FUNC knob assignment sits at the right end of the status row (D-LEVEL on the radio) */
+.b-func { position: absolute; right: 1cqi; top: -2.9cqi; font-size: 2.1cqi; padding: 0 .9cqi; }
 .b-func, .b-mode {
   font-size: 2.6cqi; font-weight: 700; letter-spacing: .1cqi; line-height: 1.15;
   padding: .1cqi 1cqi; border: .22cqi solid #c9ced6; border-radius: .4cqi; background: #000; color: #f4f6f8;
@@ -298,20 +311,28 @@ button { font: inherit; color: inherit; }
 .b-txrx.tx { background: #ff2a1a; box-shadow: 0 0 1.4cqi rgba(255,59,48,.9); }
 .b-txrx.off { background: #2a2d31; color: #6f757d; }
 
-.b-meter { grid-area: meter; width: 100%; height: 100%; min-height: 0; display: block; cursor: pointer; align-self: center; }
+/* the scales are drawn for a wide, low face (~4:1): keep that shape whatever the cell is */
+.b-meter { grid-area: meter; width: min(100%, 38cqi); height: auto; aspect-ratio: 4 / 1; max-height: 100%; min-height: 0; display: block; cursor: pointer; align-self: center; justify-self: start; }
 .b-freq { grid-area: freq; min-width: 0; display: flex; align-items: flex-end; justify-content: flex-end; overflow: hidden; }
 .freq {
-  font-family: var(--freq-font); font-style: italic; font-weight: 700; font-stretch: 125%;
-  font-variation-settings: "wdth" 125;
-  font-size: 12cqi; line-height: .92; letter-spacing: -.02em; white-space: nowrap; color: #7f8fff;
+  font-family: var(--digit-font); font-style: normal; font-weight: 700; transform: skewX(-10deg);
+  font-size: 11.5cqi; line-height: .92; letter-spacing: 0; white-space: nowrap; color: #8c8eff;
   text-shadow: 0 0 .3cqi rgba(110,130,255,.35);
   font-variant-numeric: tabular-nums; cursor: pointer; padding-right: .2em;
 }
 .freq.tx { color: #ff3b30; text-shadow: 0 0 .3cqi rgba(255,59,48,.45); }
-.freq .d { display: inline-block; }
-.freq .d:hover { color: #c3ccff; }
-.freq .sm { font-size: .6em; }
-.freq .dot { display: inline-block; width: .32em; text-align: center; }
+.freq { --fc: currentColor; }
+/* SVG glyph masks filled with the text colour (js/digits.js) */
+.freq .d, .freq .dot {
+  display: inline-block; height: .72em; background: currentColor;
+  -webkit-mask: var(--glyph) center / 100% 100% no-repeat; mask: var(--glyph) center / 100% 100% no-repeat;
+}
+/* glyph boxes from js/digits.js (digit height = .72em); the boxes carry wide side bearings, so the margins
+   pull the digits to the radio's gap (~.07 x height) */
+.freq .d { width: .698em; margin-right: -.083em; }
+.freq .dot { width: .223em; margin: 0 -.03em; }
+.freq .d:hover { background: #c3ccff; }
+.freq .sm { font-size: .78em; }
 
 .b-rx { grid-area: rx; display: grid; grid-template-columns: repeat(4, 1fr); align-self: stretch; }
 .rxt {
@@ -319,7 +340,8 @@ button { font: inherit; color: inherit; }
   border: 0; border-right: .2cqi solid #000; cursor: pointer; padding: 0;
   background: linear-gradient(180deg, #4a4e54, #24272b 55%, #1a1c1f); color: #fff;
 }
-.rxt b { font-size: 2.2cqi; font-weight: 700; color: #d6dae0; letter-spacing: .15cqi; }
+.rxt b { font-size: 2.2cqi; font-weight: 700; color: #f0d24a; letter-spacing: .15cqi; }
+.rxt.na b { color: #e6e8eb; }
 .rxt span { font-size: 2.9cqi; font-weight: 800; letter-spacing: .1cqi; min-height: 1.2em; }
 .rxt:active { filter: brightness(1.3); }
 .b-filt { grid-area: filt; position: relative; min-width: 0; }
@@ -327,7 +349,7 @@ button { font: inherit; color: inherit; }
 
 .scope { grid-area: sc; position: relative; min-height: 0; border-top: .15cqi solid #1f2124; }
 .scope canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.sc-info { position: absolute; right: 1.2cqi; top: .6cqi; font-size: 2cqi; font-weight: 800; letter-spacing: .1cqi; color: #6f86ff; text-shadow: 0 0 .4cqi #000; pointer-events: none; }
+.sc-info { position: absolute; right: 1cqi; top: .4cqi; font-size: 2.4cqi; font-weight: 700; letter-spacing: 0; word-spacing: .3cqi; color: #8c8eff; text-shadow: 0 0 .4cqi #000; pointer-events: none; }
 
 /* left/right dual layout */
 /* left/right dual layout (the radio's default screen, product photo):
@@ -335,23 +357,30 @@ button { font: inherit; color: inherit; }
    The FUNC assignment box sits at the right end of the status row, like D-LEVEL on the radio. */
 .lcd.lay-lr .band {
   grid-template-columns: minmax(0, 1fr) 15cqi;
-  grid-template-rows: 3.4cqi 3.4cqi auto 8.6cqi;
+  grid-template-rows: 2.8cqi 2.6cqi 6.4cqi 8.6cqi;
   grid-template-areas: "tags mode" "txrx ." "freq freq" "meter filt";
-  row-gap: .4cqi; padding: .5cqi 1.2cqi .8cqi;
+  row-gap: .45cqi; padding: .3cqi 1cqi .4cqi;
 }
-.lcd.lay-lr #band1 { border-top: 0; border-right: .15cqi solid #1f2124; }
+.lcd.lay-lr #band1 { border-top: 0; }
+.lcd.lay-lr .pop { top: 3.2cqi; bottom: 7cqi; }
 .lcd.lay-lr .b-rx { display: none; }
 .lcd.lay-lr .b-side { display: contents; }
-.lcd.lay-lr .b-tags span { font-size: 2.9cqi; padding: 0 .6cqi; line-height: 1.12; }
-.lcd.lay-lr .b-mode { grid-area: mode; justify-self: end; align-self: start; font-size: 2.6cqi; min-width: 15cqi; letter-spacing: .5cqi; padding: 0 1cqi; border-width: .2cqi; }
+.lcd.lay-lr .b-tags span { font-size: 2.6cqi; padding: 0 .5cqi; line-height: 1.12; }
+.lcd.lay-lr .b-mode { grid-area: mode; justify-self: end; align-self: start; min-width: 11cqi; letter-spacing: .5cqi; padding: 0 1cqi; border-width: .2cqi; font-size: 2.4cqi; }
 .lcd.lay-lr .b-txrx { grid-area: txrx; justify-self: start; align-self: start; font-size: 2.7cqi; padding: 0 .9cqi; line-height: 1.12; }
-.lcd.lay-lr .b-func { position: absolute; right: 1.2cqi; top: -3.9cqi; font-size: 2.1cqi; padding: 0 .9cqi; }
+.lcd.lay-lr .b-func { position: absolute; right: 1cqi; top: -2.9cqi; font-size: 2.1cqi; padding: 0 .9cqi; }
 .lcd.lay-lr .st-bar { padding-right: 18cqi; }
-.lcd.lay-lr .freq { font-size: 7.4cqi; color: #8c8eff; text-shadow: 0 0 .5cqi rgba(120,125,255,.35); }
+/* frequency: starts ~13% into the half, tall narrow italic; a 3-digit MHz reading is squeezed horizontally
+   (same height), as the radio does */
+.lcd.lay-lr .b-freq { justify-content: flex-start; align-items: flex-end; padding-left: 5.4cqi; }
+.lcd.lay-lr .freq {
+  font-size: 8.2cqi; font-weight: 700; letter-spacing: 0;
+  color: #8c8eff; text-shadow: 0 0 .5cqi rgba(120,125,255,.35); transform-origin: left center; padding-right: 0;
+}
 .lcd.lay-lr .freq .sm { font-size: 1em; }
-.lcd.lay-lr .b-filt { border: .15cqi solid #3a3d42; border-radius: .3cqi; }
-.lcd.lay-single .band { grid-template-rows: 3.2cqi 13cqi 7cqi; }
-.lcd.lay-single .freq { font-size: 13cqi; }
+.lcd.lay-lr .b-filt { border: .15cqi solid #4a4d52; border-radius: .2cqi; margin: .2cqi 0 .6cqi; }
+.lcd.lay-lr .st-bar { font-size: 2cqi; }
+.lcd.lay-single .band { grid-template-rows: 2.8cqi 11cqi 8cqi; }
 
 /* bottom soft keys */
 .softbar { grid-area: sb; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border-top: .2cqi solid #000; }
@@ -487,38 +516,40 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .toast.err { background: #4a1414; border-color: #8a2b25; }
 
 /* ================= RESPONSIVE ================= */
-/* Wide layout: every part is placed in the photo's front-face coordinates (1545 x 535 px, origin top-left),
-   converted to cqw of the face, so LCD / knobs / dial keep the radio's relative positions and sizes. */
+/* Wide layout: every part is placed in the photo's front-face coordinates (1545 px wide, origin top-left),
+   converted to cqw of the face, so LCD / knobs / dial keep the radio's relative positions and sizes.
+   The face is 495 px tall instead of the photo's 535 (less room under the LCD); vertical positions are scaled to it. */
 @container main (min-width: 1181px) {
-  .head { display: block; position: relative; aspect-ratio: 1545 / 535; padding: 0; container-type: inline-size; }
+  .head { display: block; position: relative; aspect-ratio: 1545 / 495; padding: 0; container-type: inline-size; }
   .h-left, .h-right, .rcol { display: contents; }
   .cluster { position: static; width: auto; height: auto; transform: none; margin: 0; }
   .kw { position: absolute; display: block; }
   .kw > label { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); }
   .kw .knob-r { width: 100%; height: 100%; }
-  .h-left .kw:nth-child(1) { left: 0.647cqw; top: 6.472cqw; width: 7.767cqw; height: 7.767cqw; }
-  .h-left .kw:nth-child(2) { left: 1.424cqw; top: 16.893cqw; width: 6.861cqw; height: 3.754cqw; }
-  .h-left .kw:nth-child(3) { left: 0.647cqw; top: 24.725cqw; width: 7.767cqw; height: 7.767cqw; }
-  .rcol .kw:first-child { left: 91.133cqw; top: 6.472cqw; width: 7.767cqw; height: 7.767cqw; }
-  .rcol .kw:last-child { left: 91.133cqw; top: 24.725cqw; width: 7.767cqw; height: 7.767cqw; }
+  .h-left .kw:nth-child(1) { left: 0.647cqw; top: 5.698cqw; width: 7.767cqw; height: 7.767cqw; }
+  .h-left .kw:nth-child(2) { left: 1.424cqw; top: 15.630cqw; width: 6.861cqw; height: 3.754cqw; }
+  .h-left .kw:nth-child(3) { left: 0.647cqw; top: 22.586cqw; width: 7.767cqw; height: 7.767cqw; }
+  .rcol .kw:first-child { left: 91.133cqw; top: 5.698cqw; width: 7.767cqw; height: 7.767cqw; }
+  .rcol .kw:last-child { left: 91.133cqw; top: 22.586cqw; width: 7.767cqw; height: 7.767cqw; }
   .txbtn { width: 100%; height: 100%; }
-  .dispkey { position: absolute; left: 90.615cqw; top: 16.699cqw; width: 5.049cqw; height: 4.013cqw; }
+  .dispkey { position: absolute; left: 90.615cqw; top: 15.451cqw; width: 5.049cqw; height: 4.013cqw; }
   /* LCD: the screen itself, no top/bottom frame */
-  .h-screen { position: absolute; left: 12.816cqw; top: 4.725cqw; width: 44.919cqw; height: 25.243cqw; padding: 0; background: none; box-shadow: none; border-radius: 0; }
+  .h-screen { position: absolute; left: 11.133cqw; top: 2.395cqw; width: 48.220cqw; height: 27.120cqw; padding: 0; background: none; box-shadow: none; border-radius: 0; }
   /* MAIN DIAL with its keys hugging it (the key edge facing the dial follows a circle of r=196) */
-  .dial { left: 76.052cqw; top: 19.094cqw; width: 21.489cqw; height: 21.489cqw; margin: 0; transform: translate(-50%, -50%); }
-  .vfo-arc { left: 76.052cqw; top: 19.094cqw; width: 24.078cqw; height: 24.078cqw; margin: 0; transform: translate(-50%, -50%); border-width: 0.777cqw;
+  .dial { left: 76.052cqw; top: 17.666cqw; width: 21.489cqw; height: 21.489cqw; margin: 0; transform: translate(-50%, -50%); }
+  .vfo-arc { left: 76.052cqw; top: 17.666cqw; width: 24.078cqw; height: 24.078cqw; margin: 0; transform: translate(-50%, -50%); border-width: 0.777cqw;
     -webkit-mask: linear-gradient(transparent 27%, #000 27% 73%, transparent 73%); mask: linear-gradient(transparent 27%, #000 27% 73%, transparent 73%); }
-  .busy { left: 76.052cqw; top: 1.812cqw; }
+  .silk { position: absolute; left: 11.133cqw; width: 48.220cqw; top: 29.515cqw; height: calc(2.524cqw + 20px); align-items: center; font-size: 1.100cqw; }
+  .busy { left: 76.052cqw; top: 1.677cqw; }
   .rk { --rr: 12.686cqw; }
   .rk b { font-size: 1.424cqw; }
-  .rk-tl { left: 63.301cqw; top: 3.236cqw; width: 10.032cqw; height: 5.178cqw; right: auto; bottom: auto; --cx: 12.751cqw; --cy: 15.858cqw; }
+  .rk-tl { left: 63.301cqw; top: 2.994cqw; width: 10.032cqw; height: 5.178cqw; right: auto; bottom: auto; --cx: 12.751cqw; --cy: 14.672cqw; }
   .rk-tl b { left: 3.495cqw; top: 3.042cqw; right: auto; bottom: auto; transform: translate(-50%, -50%); }
-  .rk-tr { left: 78.964cqw; top: 3.236cqw; width: 10.032cqw; height: 5.178cqw; right: auto; bottom: auto; --cx: -2.913cqw; --cy: 15.858cqw; }
+  .rk-tr { left: 78.964cqw; top: 2.994cqw; width: 10.032cqw; height: 5.178cqw; right: auto; bottom: auto; --cx: -2.913cqw; --cy: 14.672cqw; }
   .rk-tr b { left: 7.184cqw; top: 2.783cqw; right: auto; bottom: auto; transform: translate(-50%, -50%); }
-  .rk-bl { left: 63.301cqw; top: 28.155cqw; width: 10.032cqw; height: 5.178cqw; right: auto; bottom: auto; --cx: 12.751cqw; --cy: -9.061cqw; }
+  .rk-bl { left: 63.301cqw; top: 26.050cqw; width: 10.032cqw; height: 5.178cqw; right: auto; bottom: auto; --cx: 12.751cqw; --cy: -8.384cqw; }
   .rk-bl b { left: 3.236cqw; top: 2.718cqw; right: auto; bottom: auto; transform: translate(-50%, -50%); }
-  .rk-br { left: 78.964cqw; top: 28.155cqw; width: 10.032cqw; height: 5.178cqw; right: auto; bottom: auto; --cx: -2.913cqw; --cy: -9.061cqw; }
+  .rk-br { left: 78.964cqw; top: 26.050cqw; width: 10.032cqw; height: 5.178cqw; right: auto; bottom: auto; --cx: -2.913cqw; --cy: -8.384cqw; }
   .rk-br b { left: 6.472cqw; top: 2.913cqw; right: auto; bottom: auto; transform: translate(-50%, -50%); }
 }
 /* follows the main column (it shrinks when the sidebar is open), not the viewport */
@@ -551,3 +582,28 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   .knob-r { width: 60px; height: 60px; }
   .deck { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* POWER off: the screen is dark, as on the radio */
+.lcd.off > * { visibility: hidden; }
+.lcd.off { background: #050506; }
+
+/* ================= WINDOW STATUS BAR ================= */
+#statusbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; height: 26px;
+  display: flex; align-items: center; gap: 16px; padding: 0 14px;
+  background: #121316; border-top: 1px solid var(--panel-line);
+  font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; user-select: text;
+}
+.sb-item { display: inline-flex; align-items: center; gap: 6px; }
+.sb-item b { font-weight: 700; letter-spacing: 1px; color: var(--text); }
+.sb-item > i { width: 7px; height: 7px; border-radius: 50%; background: #3a3d42; }
+.sb-item.on > i { background: var(--ok); box-shadow: 0 0 5px var(--ok); }
+.sb-err { border: 0; padding: 1px 8px; border-radius: 3px; background: var(--tx); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.sb-msg { user-select: text; cursor: text; color: #ff8a80; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sb-sp { flex: 1; }
+#sbClock { font-variant-numeric: tabular-nums; color: var(--text); }
+.sb-ver { color: #6f757d; }
+.toast { bottom: 40px; }
+
+.st-bar .si.blink { animation: blink 1s steps(2, start) infinite; }
+@keyframes blink { to { visibility: hidden; } }

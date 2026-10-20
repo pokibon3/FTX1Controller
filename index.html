@@ -10,7 +10,7 @@
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira:ital,wdth,wght@0,100..125,100..900;1,100..125,100..900&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Play:wght@700&family=Saira:ital,wdth,wght@0,100..125,100..900;1,100..125,100..900&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -56,8 +56,14 @@
       <summary>SETUP</summary>
         <div class="field"><label>CAT ボーレート</label>
           <select id="baud">
-            <option value="auto" selected>自動検出</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option>
+            <option value="auto" selected>自動検出</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>115200</option>
           </select>
+        </div>
+        <div class="field"><label>本体の CAT-1 / CAT-2 ボーレート</label>
+          <div class="row">
+            <select id="radioBaud" style="flex:1"><option>115200</option><option>38400</option><option>19200</option><option>9600</option><option>4800</option></select>
+            <button class="btn" id="btnRadioBaud" title="本体のメニュー CAT-1 RATE / CAT-2 RATE に書き込み、新しい速度で再接続">書込</button>
+          </div>
         </div>
         <label class="chk"><input type="checkbox" id="showConsole"> CAT CONSOLE を表示</label>
         <label class="chk"><input type="checkbox" id="pttLatch"> TX ボタンを LATCH（クリックで送受切替）</label>
@@ -103,7 +109,6 @@
           <div class="tk"><label>MAG<em>BAND</em></label><button class="tbar" data-act="band"></button></div>
           <div class="tk"><label>N/W<em>MODE</em></label><button class="tbar" data-act="nw"></button></div>
         </div>
-        <div class="silk"><span>HF/VHF/UHF ALL MODE TRANSCEIVER</span><b>FTX-1</b><i>CAT Control</i><small id="appVer"></small></div>
       </div>
       <span class="te-gap"></span>
       <div class="te-right">
@@ -130,6 +135,8 @@
       </section>
 
       <!-- center: 4.3" TFT -->
+      <!-- model print, in the space under the LCD -->
+      <div class="silk"><span>HF/VHF/UHF ALL MODE TRANSCEIVER</span><b>FTX-1</b><i>CAT Control</i><small id="appVer"></small></div>
       <section class="h-screen">
         <div class="lcd lay-ud" id="lcd">
           <div class="st-bar" id="stBar"></div>
@@ -251,6 +258,17 @@
       </div>
     </form>
   </dialog>
+
+  <!-- app status (not part of the radio's screen) -->
+  <footer id="statusbar">
+    <span class="sb-item" id="sbCat"><i></i><b>CAT</b><span>未接続</span></span>
+    <span class="sb-item" id="sbAudio"><i></i><b>USB AUDIO</b><span>停止</span></span>
+    <button class="sb-item sb-err" id="sbErr" hidden title="クリックで CAT CONSOLE を表示"></button>
+    <span class="sb-msg" id="sbMsg"></span>
+    <span class="sb-sp"></span>
+    <span class="sb-item" id="sbClock"></span>
+    <span class="sb-item sb-ver" id="sbVer"></span>
+  </footer>
 
   <div class="toast" id="toast" hidden></div>
 

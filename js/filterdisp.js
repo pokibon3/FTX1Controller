@@ -49,12 +49,7 @@ export class FilterDisplay {
     c.lineTo(xr - slope * 0.3, top);
     c.lineTo(xr + slope, base);
     c.closePath();
-    const g = c.createLinearGradient(0, top, 0, base);
-    g.addColorStop(0, '#5b6068');
-    g.addColorStop(1, '#2a2d32');
-    c.fillStyle = g;
-    c.fill();
-    c.strokeStyle = '#d7dbe0';
+    c.strokeStyle = '#e6e9ed';
     c.lineWidth = Math.max(1, H * 0.035);
     c.stroke();
 
@@ -69,7 +64,7 @@ export class FilterDisplay {
       c.moveTo(xl - slope, base); c.lineTo(xl + slope * 0.3, top); c.lineTo(xr - slope * 0.3, top); c.lineTo(xr + slope, base);
       c.closePath();
       c.clip();
-      c.fillStyle = '#f2f4f7';
+      c.fillStyle = '#9ca2aa';
       const bw = (xr - xl) / n;
       for (let i = 0; i < n; i++) {
         const f0 = lo + ((hi - lo) * i) / n, f1 = lo + ((hi - lo) * (i + 1)) / n;

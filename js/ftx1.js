@@ -115,14 +115,23 @@ function initialState() {
     att: false, preamp: [0, 0, 0], agc: [4, 4],
     shiftOn: [false, false], shift: [0, 0], width: [0, 0],
     lock: false, tuner: false, spot: false,
+    sf: '',           // FUNC knob function (SF P2 code)
+    fn: 0,            // FN: 0 off / 1 FINE / 2 FAST
+    ms: ['0', '0'],   // MS: TX meter shown on MAIN / SUB (0 PO 1 COMP 2 ALC 3 VDD 4 ID 5 SWR)
+    vm: [{ t: 0, ch: '' }, { t: 0, ch: '' }], // IF/OI P7 (0 VFO 1 memory 2 memory tune 3 QMB 5 PMS) and P1
+    ri: null,         // RI: { hiswr, tuning, busy } (MAIN side)
     // radio's own spectrum scope (SS P2 -> P3): 0 SPEED, 5 SPAN, 6 MODE
-    scope: { 0: '2', 5: '6', 6: '0' },
+    scope: { 0: '2', 1: '0', 3: '0', 4: 0, 5: '6', 6: '0' }, // 1 PEAK, 3 COLOR, 4 LEVEL (dB)
+    dim: [10, 10, 10], // DA: contrast / dimmer / LED (00-20)
+    proc: 50, amc: 50, voxDelay: 6, bkDelay: 6, // PL / AO / VD / SD
     clarRx: [false, false], clarTx: [false, false], clarOfs: [0, 0],
     errors: 0, lastRx: 0,
   };
 }
 
 const POLL_PREFIX = /^(SM|RM)/;
+// reads the radio rejects in some modes (MG; is refused in CW): a "?;" for these is logged, not counted
+const MODE_DEPENDENT = /^MG;/;
 
 export class FTX1 extends EventTarget {
   constructor() {
@@ -158,6 +167,9 @@ export class FTX1 extends EventTarget {
         await this.link.open(port, b);
         if (await this._probe()) {
           this.baud = b;
+          this.port = port;
+          this.s.errors = 0; // count rejections per connection
+          this.pending = [];
           this.probing = false;
           this._emit('connection');
           this.smSeen = this.rmSeen = false;
@@ -201,14 +213,15 @@ export class FTX1 extends EventTarget {
   }
 
   // ---- low level ----
-  send(cmd, { key, poll = false } = {}) {
+  // read: the command expects an answer (polls always do) — used to tell which command a "?;" rejects
+  send(cmd, { key, poll = false, read = poll } = {}) {
     if (!this.connected) return;
     if (key) {
       const q = this.queue.find((x) => x.key === key);
       if (q) { q.cmd = cmd; return; }
     }
     if (poll && (this.queue.length > 16 || this.queue.some((x) => x.cmd === cmd))) return;
-    this.queue.push({ cmd, key, poll });
+    this.queue.push({ cmd, key, poll, read });
     this._pump();
   }
 
@@ -220,6 +233,8 @@ export class FTX1 extends EventTarget {
       try {
         await this.link.write(item.cmd);
         this._emit('log', { dir: 'tx', text: item.cmd, poll: item.poll });
+        // the radio answers in order: keep reads awaiting an answer, oldest first
+        if (item.read) this.pending = [...(this.pending || []).slice(-31), item.cmd];
       } catch (e) {
         this._emit('log', { dir: 'err', text: e.message });
         break;
@@ -252,10 +267,11 @@ export class FTX1 extends EventTarget {
   // ---- polling ----
   readAll() {
     ['ID;', 'FA;', 'FB;', 'MD0;', 'MD1;', 'VS;', 'FT;', 'FR;', 'TX;',
-      'AG0;', 'AG1;', 'RG0;', 'RG1;', 'SQ0;', 'SQ1;', 'PC;', 'MG;', 'KS;', 'KP;', 'BI;', 'VX;', 'VG;', 'ML;',
+      'AG0;', 'AG1;', 'RG0;', 'RG1;', 'SQ0;', 'SQ1;', 'PC;', 'MG;', 'KS;', 'KP;', 'BI;', 'VX;', 'VG;', 'ML1;',
       'NL0;', 'NL1;', 'RL0;', 'RL1;', 'NA0;', 'NA1;', 'BC0;', 'BC1;', 'BP00;', 'BP01;', 'CO00;', 'CO01;', 'CO02;', 'CO03;',
-      'RA0;', 'PA0;', 'PA1;', 'PA2;', 'GT0;', 'GT1;', 'IS0;', 'IS1;', 'SH0;', 'SH1;', 'LK;', 'AC;', 'CS;', 'SS00;', 'SS05;', 'SS06;',
-      'CF000;', 'CF001;', 'CF100;', 'CF101;', 'AI;'].forEach((c) => this.send(c));
+      'RA0;', 'PA0;', 'PA1;', 'PA2;', 'GT0;', 'GT1;', 'IS0;', 'IS1;', 'SH0;', 'SH1;', 'LK;', 'AC;', 'CS;', 'SS00;', 'SS05;', 'SS06;', 'SF0;', 'FN;', 'MS;', 'ML0;', 'IF;', 'OI;', 'RI0;',
+      'SS01;', 'SS03;', 'SS04;', 'DA;', 'PL;', 'AO;', 'VD;', 'SD;',
+      'CF000;', 'CF001;', 'CF100;', 'CF101;', 'AI;'].forEach((c) => this.send(c, { read: true }));
   }
 
   _startPolling() {
@@ -282,12 +298,13 @@ export class FTX1 extends EventTarget {
   }
   _slowPoll() {
     const p = { poll: true };
-    ['TX;', 'FA;', 'FB;', 'MD0;', 'MD1;', 'VS;'].forEach((c) => this.send(c, p));
+    ['TX;', 'FA;', 'FB;', 'MD0;', 'MD1;', 'VS;', 'IF;', 'OI;', 'RI0;'].forEach((c) => this.send(c, p));
   }
   _levelPoll() {
     const p = { poll: true };
     ['AG0;', 'AG1;', 'SQ0;', 'SQ1;', 'RG0;', 'PC;', 'FT;', 'FR;', 'LK;', 'NL0;', 'RL0;', 'NA0;', 'RA0;',
-      `PA${bandType(this.s.freq[this.s.vs])};`, 'GT0;', 'SH0;', 'SH1;'].forEach((c) => this.send(c, p));
+      `PA${bandType(this.s.freq[this.s.vs])};`, 'GT0;', 'SH0;', 'SH1;', 'SF0;', 'FN;', 'MS;', 'ML0;', 'ML1;', 'CS;',
+      'SS00;', 'SS01;', 'SS03;', 'SS04;', 'SS05;', 'SS06;', 'DA;', 'PL;', 'AO;', 'VD;', 'SD;'].forEach((c) => this.send(c, p));
   }
 
   // ---- parser ----
@@ -295,8 +312,22 @@ export class FTX1 extends EventTarget {
     const s = this.s;
     s.lastRx = performance.now();
     this._emit('log', { dir: 'rx', text: m + ';', poll: POLL_PREFIX.test(m) });
-    if (m === '?') { s.errors++; this._changed(); return; }
+    if (m === '?') {
+      // the oldest read still waiting for its answer is the one the radio rejected
+      const bad = (this.pending || []).shift();
+      if (bad && MODE_DEPENDENT.test(bad)) {
+        this._emit('log', { dir: 'sys', text: `${bad} not available in this mode` });
+        return;
+      }
+      s.errors++;
+      this._emit('log', { dir: 'err', text: `? (rejected: ${bad || 'a set command'})` });
+      this._changed();
+      return;
+    }
     const c = m.slice(0, 2), p = m.slice(2);
+    // an answer settles the oldest pending read with the same command (AI pushes may settle one early; harmless)
+    const pi = (this.pending || []).findIndex((x) => x.startsWith(c));
+    if (pi >= 0) this.pending.splice(pi, 1);
     const v = +p[0];
     const num = (a, b) => parseInt(p.slice(a, b), 10);
     const ok = (key) => !this._held(key);
@@ -312,10 +343,17 @@ export class FTX1 extends EventTarget {
         const vfo = c === 'IF' ? 0 : 1;
         const f = p.slice(5, 14);
         if (/^\d{9}$/.test(f) && ok(vfo ? 'FB' : 'FA')) s.freq[vfo] = +f;
+        if (/^[0-5]$/.test(p[22] || '')) s.vm[vfo] = { t: +p[22], ch: p.slice(0, 5) };
         if (MODE_NAME[p[21]] && ok('MD' + vfo)) s.mode[vfo] = p[21];
         break;
       }
-      case 'MD': if (MODE_NAME[p[1]] && ok('MD' + v)) s.mode[v] = p[1]; break;
+      case 'MD':
+        if (MODE_NAME[p[1]] && ok('MD' + v)) {
+          // MG is refused in CW; read it again when leaving CW
+          if (s.mode[v] !== p[1] && isCW(s.mode[v]) && !isCW(p[1])) this.send('MG;', { read: true });
+          s.mode[v] = p[1];
+        }
+        break;
       // SM: 3 or 4 digit value; RM: 3 digits, optionally followed by 3 more (FTDX-style RMnVVV000)
       case 'SM': this.smSeen = true; s.smeter[v] = Math.min(255, num(1) || 0); break;
       case 'RM': {
@@ -378,7 +416,21 @@ export class FTX1 extends EventTarget {
       case 'SH': if (ok('SH' + v)) s.width[v] = num(2, 4); break;
       case 'LK': if (ok('LK')) s.lock = p[0] === '1'; break;
       case 'CS': if (ok('CS')) s.spot = p[0] === '1'; break;
-      case 'SS': if (p[0] === '0' && p[1] in s.scope && p[2] && ok('SS' + p[1])) s.scope[p[1]] = p[2]; break;
+      case 'SF': if (p[0] === '0' && p[1] && ok('SF')) s.sf = p[1]; break;
+      case 'FN': if (ok('FN')) s.fn = +p[0] || 0; break;
+      case 'MS': if (ok('MS') && p.length >= 2) s.ms = [p[0], p[1]]; break;
+      // RI P1(0) P2 HI-SWR P3 rec/play P4 TX P5(0) P6 tuning P7 scan P8 SQL open
+      case 'RI': if (p.length >= 8) s.ri = { hiswr: p[1] === '1', tuning: p[5] === '1', busy: p[7] === '1' }; break;
+      case 'SS':
+        if (p[0] !== '0' || !(p[1] in s.scope) || !ok('SS' + p[1])) break;
+        if (p[1] === '4') { const db = parseFloat(p.slice(2, 7)); if (Number.isFinite(db)) s.scope[4] = db; } // SS04+05.0
+        else if (p[2]) s.scope[p[1]] = p[2];
+        break;
+      case 'DA': if (ok('DA') && p.length >= 8) s.dim = [num(2, 4), num(4, 6), num(6, 8)]; break;
+      case 'PL': if (ok('PL')) s.proc = num(0, 3); break;
+      case 'AO': if (ok('AO')) s.amc = num(0, 3); break;
+      case 'VD': if (ok('VD')) s.voxDelay = num(0, 2); break;
+      case 'SD': if (ok('SD')) s.bkDelay = num(0, 2); break;
       case 'AC': if (ok('AC')) s.tuner = !!p[2] && p[2] !== '0'; break;
       case 'CF':
         if (p[2] === '0' && ok('CFs' + v)) { s.clarRx[v] = p[3] === '1'; s.clarTx[v] = p[4] === '1'; }
@@ -457,10 +509,45 @@ export class FTX1 extends EventTarget {
     });
   }
   setWidth(vfo, code) { code = clamp(code, 0, widthMax(this.s.mode[vfo])); this._set('SH' + vfo, `SH${vfo}0${pad(code, 2)};`, () => { this.s.width[vfo] = code; }); }
+  setFuncKnob(code) { this._set('SF', `SF0${code};`, () => { this.s.sf = code; }); }
+  setFine(n) { this._set('FN', `FN${n};`, () => { this.s.fn = n; }); }
+  setMeterSel(main, sub) { this._set('MS', `MS${main}${sub};`, () => { this.s.ms = [main, sub]; }); }
+  qmbStore() { this.send('QI;'); }
+  qmbRecall() { this.send('QR;'); this._refreshVfo(0); this.send('IF;', { read: true }); }
   setSpot(on) { this._set('CS', `CS${on ? 1 : 0};`, () => { this.s.spot = on; }); }
   zeroIn(vfo) { this.send(`ZI${vfo};`); }
   // SS P1=0 P2 P3 P4-P7=0000 (P2: 0 SPEED, 5 SPAN, 6 MODE)
+  setScopeLevel(db) {
+    db = clamp(Math.round(db * 2) / 2, -30, 30);
+    const t = `${db < 0 ? '-' : '+'}${Math.abs(db).toFixed(1).padStart(4, '0')}`;
+    this._set('SS4', `SS04${t};`, () => { this.s.scope[4] = db; });
+  }
+  setDim(i, v) {
+    const d = [...this.s.dim]; d[i] = clamp(Math.round(v), 0, 20);
+    this._set('DA', `DA00${d.map((x) => pad(x, 2)).join('')};`, () => { this.s.dim = d; });
+  }
+  setProc(v) { v = clamp(Math.round(v), 0, 100); this._set('PL', `PL${pad(v, 3)};`, () => { this.s.proc = v; }); }
+  setAmc(v) { v = clamp(Math.round(v), 1, 100); this._set('AO', `AO${pad(v, 3)};`, () => { this.s.amc = v; }); }
+  setVoxDelay(v) { v = clamp(Math.round(v), 0, 33); this._set('VD', `VD${pad(v, 2)};`, () => { this.s.voxDelay = v; }); }
+  setBkDelay(v) { v = clamp(Math.round(v), 0, 33); this._set('SD', `SD${pad(v, 2)};`, () => { this.s.bkDelay = v; }); }
   setScope(item, code) { this._set('SS' + item, `SS0${item}${code}0000;`, () => { this.s.scope[item] = String(code); }); }
+  // Radio's CAT-1 / CAT-2 rate (EX 03 01 05 / 08; P4 0:4800 1:9600 2:19200 3:38400 4:115200).
+  // The rate of the port in use changes too, so reopen it at the new rate afterwards.
+  async setRadioBaud(rate) {
+    const code = [4800, 9600, 19200, 38400, 115200].indexOf(rate);
+    if (code < 0 || !this.connected) throw new Error('未接続または未対応の速度です');
+    const port = this.port;
+    this.queue.length = 0;
+    await this.link.write(`EX030105${code};`);
+    await sleep(150);
+    await this.link.write(`EX030108${code};`);
+    await sleep(300);
+    this._stopPolling();
+    await this.link.write('AI0;').catch(() => {});
+    await this.link.close();
+    return this.connect(port, rate);
+  }
+
   // memory keys: [V/M] (VM), MAIN -> memory write (AM), memory -> MAIN VFO (MA), memory tune (VM P2=10)
   vmKey() { this.send('VM;'); this._refreshVfo(0); }
   memWrite() { this.send('AM;'); }
@@ -487,13 +574,13 @@ export class FTX1 extends EventTarget {
     [s.mode[0], s.mode[1]] = [s.mode[1], s.mode[0]];
     this._hold('FA'); this._hold('FB'); this._hold('MD0'); this._hold('MD1');
     this._changed();
-    setTimeout(() => ['FA;', 'FB;', 'MD0;', 'MD1;'].forEach((c) => this.send(c)), 300);
+    setTimeout(() => ['FA;', 'FB;', 'MD0;', 'MD1;'].forEach((c) => this.send(c, { read: true })), 300);
   }
-  copyAtoB() { this.send('AB;'); setTimeout(() => ['FB;', 'MD1;'].forEach((c) => this.send(c)), 200); }
-  copyBtoA() { this.send('BA;'); setTimeout(() => ['FA;', 'MD0;'].forEach((c) => this.send(c)), 200); }
+  copyAtoB() { this.send('AB;'); setTimeout(() => ['FB;', 'MD1;'].forEach((c) => this.send(c, { read: true })), 200); }
+  copyBtoA() { this.send('BA;'); setTimeout(() => ['FA;', 'MD0;'].forEach((c) => this.send(c, { read: true })), 200); }
   bandSelect(vfo, code) { this.send(`BS${vfo}${pad(code, 2)};`); this._refreshVfo(vfo); }
   bandStep(vfo, up) { this.send(`B${up ? 'U' : 'D'}${vfo};`); this._refreshVfo(vfo); }
-  _refreshVfo(vfo) { setTimeout(() => [vfo ? 'FB;' : 'FA;', `MD${vfo};`].forEach((c) => this.send(c)), 250); }
+  _refreshVfo(vfo) { setTimeout(() => [vfo ? 'FB;' : 'FA;', `MD${vfo};`].forEach((c) => this.send(c, { read: true })), 250); }
 
   ptt(on, cmd = 1) {
     // PTT jumps the queue: drop pending polls and any older PTT command so only the latest state goes out

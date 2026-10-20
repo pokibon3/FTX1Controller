@@ -35,12 +35,13 @@ export class FtxMeter {
   setVol(f) { this.vol = Math.min(1, Math.max(0, f || 0)); }
 
   _geom(W, H) {
-    const R = W * 3.2;
+    // shallow arcs as on the radio; rows from the top: dB, S figures, S arc, PO figures, PO arc, VOL
+    const R = W * 5;
     const arcs = {
-      top: { cx: W * 0.6, cy: H * 0.43 + R, r: R },
-      bottom: { cx: W * 0.6, cy: H * 0.68 + R, r: R },
+      top: { cx: W * 0.6, cy: H * 0.44 + R, r: R },
+      bottom: { cx: W * 0.6, cy: H * 0.8 + R, r: R },
     };
-    const P = { x: W * 0.52, y: H * 1.75 };
+    const P = { x: W * 0.52, y: H * 2.2 };
     // needle sweep: S-arc crossing from x=0.085W (raw 0) to x=0.965W (raw 255)
     const yOn = (arc, x) => arc.cy - Math.sqrt(arc.r * arc.r - (x - arc.cx) ** 2);
     const ang = (x) => Math.atan2(x - P.x, P.y - yOn(arcs.top, x));
@@ -62,7 +63,7 @@ export class FtxMeter {
   _drawScale(c, g, sc, arc, isTop) {
     const { H } = g;
     const white = '#f4f6f8', red = sc.hotColor || '#ff3b30';
-    const fs = H * (isTop ? 0.2 : 0.19);
+    const fs = Math.min(H * 0.24, g.W * 0.06);
     // arc line, split at the hot point
     const seg = (r0, r1, color) => {
       c.strokeStyle = color;
@@ -97,7 +98,7 @@ export class FtxMeter {
       const a = this._angle(g, raw);
       const p = this._hit(g, arc, a);
       const isHot = raw > hot;
-      const len = H * (minor ? 0.05 : 0.09);
+      const len = H * (minor ? 0.04 : 0.07);
       const ux = Math.sin(a), uy = -Math.cos(a);
       c.strokeStyle = isHot ? red : white;
       c.lineWidth = Math.max(1, H * 0.02);
@@ -110,7 +111,7 @@ export class FtxMeter {
       c.font = `italic 700 ${fs}px ${FONT}`;
       c.textAlign = 'center';
       c.textBaseline = 'alphabetic';
-      const lx = p.x + ux * len * 1.3, ly = p.y + uy * len * 1.3 - H * 0.02;
+      const lx = p.x + ux * len * 1.3, ly = p.y + uy * len * 1.3 - H * 0.01;
       c.fillText(label, lx, ly);
       lastLabel = { x: lx + c.measureText(label).width / 2, y: ly };
     }
@@ -120,16 +121,18 @@ export class FtxMeter {
     c.textAlign = 'left';
     c.textBaseline = 'alphabetic';
     const start = this._hit(g, arc, this._angle(g, 0));
-    c.font = `italic 800 ${isTop ? H * 0.3 : H * 0.18}px ${FONT}`;
-    c.fillText(sc.name, H * 0.04, isTop ? start.y - H * 0.02 : start.y + H * 0.05);
+    c.font = `italic 800 ${isTop ? Math.min(H * 0.34, g.W * 0.085) : Math.min(H * 0.2, g.W * 0.05)}px ${FONT}`;
+    // "S" on its arc's left end; "PO" left of its arc, above the VOL row
+    c.fillText(sc.name, H * 0.04, isTop ? start.y - H * 0.04 : H * 0.75);
 
     // unit after the last tick ("W") or "dB" over "+60"
     if (sc.unit) {
       const last = this._hit(g, arc, this._angle(g, 255));
       c.fillStyle = sc.unitHot ? red : white;
-      c.font = `italic 700 ${fs * (sc.unitAbove ? 0.85 : 1.05)}px ${FONT}`;
-      c.textAlign = sc.unitAbove ? 'center' : 'left';
-      if (sc.unitAbove) c.fillText(sc.unit, last.x - H * 0.05, last.y - H * 0.34);
+      c.font = `italic 700 ${fs * (sc.unitAbove ? 0.62 : 1.05)}px ${FONT}`;
+      c.textAlign = sc.unitAbove ? 'right' : 'left';
+      // "dB" stacked above the last figure ("+60")
+      if (sc.unitAbove) c.fillText(sc.unit, lastLabel ? lastLabel.x : last.x, (lastLabel ? lastLabel.y : last.y) - fs * 0.82);
       // right of the last tick label on its baseline, so it never overlaps the "15" / "10" figures
       else if (lastLabel) c.fillText(sc.unit, Math.max(last.x + H * 0.03, lastLabel.x + fs * 0.2), lastLabel.y);
       else c.fillText(sc.unit, last.x + H * 0.03, last.y + H * 0.02);
@@ -153,7 +156,7 @@ export class FtxMeter {
     if (this.bottom) this._drawScale(c, g, this.bottom, g.arcs.bottom, false);
     // VOL label
     c.fillStyle = '#f4f6f8';
-    c.font = `italic 700 ${H * 0.15}px ${FONT}`;
+    c.font = `italic 700 ${Math.min(H * 0.18, W * 0.045)}px ${FONT}`;
     c.textAlign = 'left';
     c.textBaseline = 'middle';
     c.fillText('VOL', H * 0.04, H * 0.93);

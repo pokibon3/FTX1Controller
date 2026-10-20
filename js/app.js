@@ -10,6 +10,7 @@ import { FtxMeter } from './ftxmeter.js';
 import { FilterDisplay } from './filterdisp.js';
 import { APP_VERSION } from './version.js';
 import { CwDecoder } from './cwdecoder.js';
+import { installDigitGlyphs } from './digits.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -85,6 +86,16 @@ const PARAMS = {
   kp: { name: 'CW PITCH', get: () => s.kp, set: (v) => radio.setPitch(v), min: 0, max: 75, step: 1, fmt: (v) => `${300 + v * 10}Hz` },
   voxGain: { name: 'VOX GAIN', get: () => s.voxGain, set: (v) => radio.setVoxGain(v), min: 0, max: 100, step: 1, fmt: String },
   moni: { name: 'MONI LEVEL', get: () => s.moni, set: (v) => radio.setMonitor(v), min: 0, max: 100, step: 1, fmt: String },
+  // the radio's own FUNC-knob functions (SF), adjusted over SS / DA / PL / AO / VD / SD
+  dlevel: { name: 'D-LEVEL', get: () => s.scope[4], set: (v) => radio.setScopeLevel(v), min: -30, max: 30, step: 0.5, fmt: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}dB` },
+  dpeak: { name: 'D-PEAK', get: () => +s.scope[1], set: (v) => radio.setScope(1, v), min: 0, max: 4, step: 1, fmt: (v) => `LV${v + 1}` },
+  dcolor: { name: 'D-COLOR', get: () => parseInt(s.scope[3], 16) || 0, set: (v) => radio.setScope(3, v.toString(16).toUpperCase()), min: 0, max: 10, step: 1, fmt: (v) => `COLOR-${v + 1}` },
+  contrast: { name: 'D-CONTRAST', get: () => s.dim[0], set: (v) => radio.setDim(0, v), min: 0, max: 20, step: 1, fmt: String },
+  dimmer: { name: 'DIMMER', get: () => s.dim[1], set: (v) => radio.setDim(1, v), min: 0, max: 20, step: 1, fmt: String },
+  proc: { name: 'PROC LEVEL', get: () => s.proc, set: (v) => radio.setProc(v), min: 0, max: 100, step: 1, fmt: (v) => (v ? String(v) : 'OFF') },
+  amc: { name: 'AMC LEVEL', get: () => s.amc, set: (v) => radio.setAmc(v), min: 1, max: 100, step: 1, fmt: String },
+  voxDelay: { name: 'VOX DELAY', get: () => s.voxDelay, set: (v) => radio.setVoxDelay(v), min: 0, max: 33, step: 1, fmt: (v) => `${delayMs(v)}ms` },
+  bkDelay: { name: 'BK-DELAY', get: () => s.bkDelay, set: (v) => radio.setBkDelay(v), min: 0, max: 33, step: 1, fmt: (v) => `${delayMs(v)}ms` },
   clar: {
     name: () => `CLAR ${side()}`, get: () => s.clarOfs[V()], min: -9999, max: 9999, step: 10, fmt: (v) => signed(v, 'Hz'),
     set: (v) => {
@@ -94,6 +105,8 @@ const PARAMS = {
   },
 };
 
+// VD / SD code -> ms (00 30, 01 50, 02-05 100-250, 06-33 300-3000)
+const delayMs = (c) => [30, 50, 100, 150, 200, 250][c] ?? (c - 3) * 100;
 function paramText(key) { const p = PARAMS[key]; return p.fmt(p.get()); }
 function paramFrac(key) {
   const p = PARAMS[key], lo = val(p.min), hi = val(p.max);
@@ -106,8 +119,25 @@ function adjust(key, n) {
   p.set(+v.toFixed(2));
   popup(val(p.name), p.fmt(p.get()), paramFrac(key));
 }
+// FUNC knob functions the radio knows (SF P2), and the app parameter each one drives
+const SF_NAME = { 1: 'D-LEVEL', 2: 'D-PEAK', 3: 'D-COLOR', 4: 'D-CONTRAST', 5: 'DIMMER', 7: 'MIC GAIN', 8: 'PROC LEVEL',
+  9: 'AMC LEVEL', A: 'VOX GAIN', B: 'VOX DELAY', D: 'RF POWER', E: 'MONI LEVEL', F: 'CW SPEED', G: 'CW PITCH', H: 'BK-DELAY' };
+const SF_OF_PARAM = { dlevel: '1', dpeak: '2', dcolor: '3', contrast: '4', dimmer: '5', mic: '7', proc: '8', amc: '9',
+  voxGain: 'A', voxDelay: 'B', power: 'D', moni: 'E', ks: 'F', kp: 'G', bkDelay: 'H' };
+const PARAM_OF_SF = Object.fromEntries(Object.entries(SF_OF_PARAM).map(([k, c]) => [c, k]));
+// the knob follows the radio when the radio's function has an app parameter; radio-only ones (D-LEVEL ...) are shown
+ui.sfSeen = '';
+radio.addEventListener('change', () => {
+  if (!radio.connected || s.sf === ui.sfSeen) return;
+  ui.sfSeen = s.sf;
+  if (PARAM_OF_SF[s.sf]) { cfg.func = PARAM_OF_SF[s.sf]; ui.funcRadioOnly = false; save(); }
+  else if (SF_NAME[s.sf]) ui.funcRadioOnly = true;
+});
+const funcName = () => (radio.connected && ui.funcRadioOnly ? SF_NAME[s.sf] : val(PARAMS[cfg.func].name).replace(/ (MAIN|SUB)$/, ''));
 function assignFunc(key) {
   cfg.func = key;
+  ui.funcRadioOnly = false;
+  if (SF_OF_PARAM[key] && radio.connected) { radio.setFuncKnob(SF_OF_PARAM[key]); ui.sfSeen = SF_OF_PARAM[key]; }
   save();
   popup(val(PARAMS[key].name), paramText(key), paramFrac(key));
   render();
@@ -157,6 +187,18 @@ function toggleSplit() { radio.setTxVFO(isSplit() ? s.vs : 1 - s.vs); }
 const onOff = (b) => (b ? 'ON' : 'OFF');
 
 const METERS = { 5: 'PO', 3: 'COMP', 4: 'ALC', 8: 'VDD', 7: 'ID', 6: 'SWR' };
+// MS P1/P2 codes <-> RM meter numbers
+const MS_TO_RM = { 0: 5, 1: 3, 2: 4, 3: 8, 4: 7, 5: 6 };
+const RM_TO_MS = Object.fromEntries(Object.entries(MS_TO_RM).map(([m, r]) => [r, m]));
+function setMeterSel(rm) {
+  cfg.meterSel = rm;
+  save();
+  if (radio.connected) radio.setMeterSel(RM_TO_MS[rm], RM_TO_MS[rm]);
+}
+radio.addEventListener('change', () => {
+  const rm = MS_TO_RM[s.ms[s.ft]];
+  if (radio.connected && rm && rm !== cfg.meterSel) { cfg.meterSel = rm; save(); }
+});
 
 // radio scope (SS) codes; MODE codes combine the display type with CENTER/CURSOR/FIX
 const SC_DMODE = ['CENTER', 'CURSOR', 'FIX'];
@@ -173,6 +215,11 @@ const SCREENS = {
   FUNCTION: {
     items: () => [
       { section: 'SSB' },
+      { label: 'D-LEVEL', func: 'dlevel' },
+      { label: 'D-PEAK', func: 'dpeak' },
+      { label: 'D-COLOR', func: 'dcolor' },
+      { label: 'CONTRAST', func: 'contrast' },
+      { label: 'DIMMER', func: 'dimmer' },
       { label: 'ATT', value: () => onOff(s.att), on: () => s.att, act: () => radio.setAtt(!s.att) },
       { label: () => (bandType(s.freq[V()]) ? 'AMP' : 'IPO'), value: () => preampText(), on: () => preampVal() > 0, act: () => cyclePreamp() },
       { label: 'DNF', value: () => onOff(s.bc[V()]), on: () => s.bc[V()], act: () => radio.setBeatCancel(V(), !s.bc[V()]) },
@@ -181,15 +228,19 @@ const SCREENS = {
       { label: 'TUNER', value: () => onOff(s.tuner), on: () => s.tuner, act: () => radio.setTuner(!s.tuner) },
       { label: 'NB', func: 'nb', on: () => s.nb[V()] > 0, act: () => radio.setNB(V(), s.nb[V()] ? 0 : (ui.lastNb || 5)) },
       { label: 'DNR', func: 'nr', on: () => s.nr[V()] > 0, act: () => radio.setNR(V(), s.nr[V()] ? 0 : (ui.lastNr || 5)) },
+      { label: 'PROC LEVEL', func: 'proc' },
       { label: 'RF POWER', func: 'power' },
       { label: 'MIC GAIN', func: 'mic' },
+      { label: 'AMC LEVEL', func: 'amc' },
       { label: 'VOX', value: () => onOff(s.vox), on: () => s.vox, act: () => radio.setVox(!s.vox) },
       { label: 'VOX GAIN', func: 'voxGain' },
+      { label: 'VOX DELAY', func: 'voxDelay' },
       { section: 'CW' },
       { label: 'MONI LEVEL', func: 'moni', on: () => s.moniOn, act: () => radio.setMonitorOn(!s.moniOn) },
       { label: 'BK-IN', value: () => onOff(s.bkin), on: () => s.bkin, act: () => radio.setBreakIn(!s.bkin) },
       { label: 'CW SPEED', func: 'ks' },
       { label: 'CW PITCH', func: 'kp' },
+      { label: 'BK-DELAY', func: 'bkDelay' },
       { label: 'ZIN', value: () => 'ZERO IN', act: () => radio.zeroIn(V()) },
       { label: 'CW SPOT', value: () => onOff(s.spot), on: () => s.spot, act: () => radio.setSpot(!s.spot) },
       { section: 'VFO' },
@@ -235,7 +286,7 @@ const SCREENS = {
   METER: {
     key: () => METERS[cfg.meterSel],
     items: () => Object.entries(METERS).map(([k, name]) => ({
-      label: name, cur: () => cfg.meterSel === +k, act: () => { cfg.meterSel = +k; save(); }, close: true,
+      label: name, cur: () => cfg.meterSel === +k, act: () => { setMeterSel(+k); }, close: true,
     })),
   },
 };
@@ -318,41 +369,45 @@ function setupSoftbar() {
 const lastFreqHtml = ['', ''];
 function freqHtml(hz) {
   const str = String(hz).padStart(9, '0');
-  const d = (i, cls = '') => `<span class="d${cls}" data-p="${10 ** (8 - i)}">${str[i]}</span>`;
+  // glyphs are CSS masks (js/digits.js); the spans stay empty so each one is exactly one glyph box
+  const d = (i, cls = '') => `<span class="d${cls}" data-g="${str[i]}" data-p="${10 ** (8 - i)}"></span>`;
   let mhz = '';
   for (let i = 0; i < 3; i++) if (mhz || str[i] !== '0' || i === 2) mhz += d(i);
   let khz = '';
   for (let i = 3; i < 6; i++) khz += d(i);
   let hzs = '';
   for (let i = 6; i < 9; i++) hzs += d(i);
-  return `${mhz}<span class="dot">.</span>${khz}<span class="sm"><span class="dot">.</span>${hzs}</span>`;
+  return `${mhz}<span class="dot"></span>${khz}<span class="sm"><span class="dot"></span>${hzs}</span>`;
 }
-// One size for MAIN and SUB, fitted to the widest possible reading (3 MHz digits),
-// so the digits never shrink when the frequency gains a digit and both sides always match.
+// Frequency sizing.
+// L/R screen (the radio's default): full size, and a 3-digit MHz reading at ~0.8 of it (manual p.17).
+// U/D and single screens: as in the manual's pictures (p.18), a reading that does not fit its area
+// (e.g. 144.000.000) is drawn smaller; one that fits keeps the full size.
 function fitFreq() {
-  let size = Infinity;
   const els = [$('#freq0'), $('#freq1')];
+  const lr = $('#lcd').classList.contains('lay-lr');
   for (const el of els) {
+    el.style.transform = '';
     el.style.fontSize = '';
     const box = el.parentElement;
     if (!box.offsetParent || !box.clientWidth) continue; // hidden band (single layout)
-    const probe = el.cloneNode(false);
-    probe.removeAttribute('id');
-    probe.style.cssText = 'position:absolute;visibility:hidden;';
-    probe.innerHTML = freqHtml(888888888);
-    box.appendChild(probe);
-    const base = parseFloat(getComputedStyle(probe).fontSize);
-    const w = probe.scrollWidth;
-    probe.remove();
-    size = Math.min(size, w > box.clientWidth ? (base * box.clientWidth) / w * 0.98 : base);
+    const cs = getComputedStyle(box);
+    const avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (lr) {
+      // manual p.17: a 3-digit MHz reading (145.000.000) is drawn at ~0.8 of the size, same proportions
+      let k = s.freq[+el.id.slice(-1)] >= 100e6 ? 0.8 : 1;
+      if (el.scrollWidth * k > avail) k = avail / el.scrollWidth;
+      if (k < 1) el.style.fontSize = `${parseFloat(getComputedStyle(el).fontSize) * k}px`;
+    } else if (el.scrollWidth > avail) {
+      el.style.fontSize = `${(parseFloat(getComputedStyle(el).fontSize) * avail) / el.scrollWidth * 0.98}px`;
+    }
   }
-  if (Number.isFinite(size)) els.forEach((el) => { el.style.fontSize = `${size}px`; });
 }
 
 const RX_TILES = [
-  { label: (v) => 'ATT', value: (v) => (bandType(s.freq[v]) ? '' : onOff(s.att)), act: (v) => { if (!bandType(s.freq[v])) radio.setAtt(!s.att); } },
+  { label: (v) => 'ATT', na: (v) => !!bandType(s.freq[v]), value: (v) => (bandType(s.freq[v]) ? '' : onOff(s.att)), act: (v) => { if (!bandType(s.freq[v])) radio.setAtt(!s.att); } },
   { label: (v) => (bandType(s.freq[v]) ? 'AMP' : 'IPO'), value: (v) => preampText(v), act: (v) => cyclePreamp(v) },
-  { label: () => 'DNF', value: (v) => onOff(s.bc[v]), act: (v) => radio.setBeatCancel(v, !s.bc[v]) },
+  { label: () => 'DNF', na: (v) => isFM(s.mode[v]), value: (v) => (isFM(s.mode[v]) ? '' : onOff(s.bc[v])), act: (v) => radio.setBeatCancel(v, !s.bc[v]) },
   { label: () => 'AGC', value: (v) => AGC[s.agc[v]], act: (v) => radio.setAGC(v, (s.agc[v] + 1) % 5) },
 ];
 const rxTileEls = [[], []];
@@ -384,7 +439,7 @@ function setupBands() {
     });
     new ResizeObserver(() => fitFreq()).observe(band);
   }
-  $('#funcBox').addEventListener('click', () => popup(val(PARAMS[cfg.func].name), paramText(cfg.func), paramFrac(cfg.func)));
+  $('#funcBox').addEventListener('click', () => popup(funcName(), paramText(cfg.func), paramFrac(cfg.func)));
   document.fonts?.ready.then(() => { fitFreq(0); fitFreq(1); });
 }
 
@@ -436,7 +491,7 @@ function setupEntry() {
 // ---------------- meters ----------------
 // Tick lists are [label, raw, minor?] on the shared 0..255 needle sweep.
 const S_SCALE = {
-  name: 'S', hot: 130, hotColor: '#5b82ff', unit: 'dB', unitAbove: true, unitHot: true,
+  name: 'S', hot: 130, hotColor: '#8c8eff', unit: 'dB', unitAbove: true, unitHot: true,
   ticks: [...S_TICKS, ['', 27, 1], ['', 55, 1], ['', 80, 1], ['', 112, 1], ['', 150, 1], ['', 190, 1], ['', 240, 1], ['', 0, 1]],
 };
 const poRaw = (w, max) => 255 * Math.sqrt(w / max); // Yaesu PO scales are compressed toward the top
@@ -459,6 +514,7 @@ function drawMeters() {
     const m = meters[v];
     const txBand = s.tx && s.ft === v;
     // while transmitting, the meter on the opposite side turns gray
+    // both sides show the S scale and the selected TX meter (manual p.17)
     m.configure({ top: S_SCALE, bottom, reading: txBand ? 'bottom' : 'top', dimmed: s.tx && !txBand });
     const rxOn = v === 0 || s.dual || s.vs === 1;
     m.set(txBand ? s.meters[cfg.meterSel] : s.tx || !rxOn ? 0 : s.smeter[v]);
@@ -511,7 +567,11 @@ function setupKnobs() {
 
   const func = new Knob($('#knFunc'), {
     pxPerStep: 6,
-    onTurn: (n) => { adjust(cfg.func, n); func.showFree(); },
+    onTurn: (n) => {
+      // a radio-only function (D-LEVEL ...) has no CAT command to adjust; say so instead of turning something else
+      if (radio.connected && ui.funcRadioOnly) { popup(SF_NAME[s.sf], '本体で操作', 0); func.showFree(); return; }
+      adjust(cfg.func, n); func.showFree();
+    },
     onPress: () => openPop('FUNCTION'),
   });
 
@@ -599,6 +659,7 @@ const ACTIONS = {
   // QMB (quick memory bank, kept locally): press recalls the next slot, hold stores MAIN
   qmb: {
     press: () => {
+      if (radio.connected) { radio.qmbRecall(); popup('QMB', 'RECALL', 1); return; }
       if (!cfg.qmb.length) { popup('QMB', 'EMPTY', 0); return; }
       ui.qmbIdx = ((ui.qmbIdx ?? -1) + 1) % cfg.qmb.length;
       const q = cfg.qmb[ui.qmbIdx];
@@ -607,6 +668,7 @@ const ACTIONS = {
       popup(`QMB ${ui.qmbIdx + 1}`, (q.f / 1e6).toFixed(3), (ui.qmbIdx + 1) / cfg.qmb.length);
     },
     hold: () => {
+      if (radio.connected) { radio.qmbStore(); popup('QMB STORE', (s.freq[0] / 1e6).toFixed(3), 1); return; }
       cfg.qmb = [{ f: s.freq[0], m: s.mode[0] }, ...cfg.qmb].slice(0, 5);
       ui.qmbIdx = -1;
       save();
@@ -639,7 +701,11 @@ const ACTIONS = {
     save();
   },
   back: { press: () => { closePop(); $('#popup').hidden = true; }, hold: () => {} },
-  fine: { press: () => { ui.fine = !ui.fine; ui.fast = false; }, hold: () => { ui.fast = !ui.fast; ui.fine = false; } },
+  // FINE / FAST follow the radio (FN) while connected
+  fine: {
+    press: () => { if (radio.connected) radio.setFine(s.fn === 1 ? 0 : 1); else { ui.fine = !ui.fine; ui.fast = false; } },
+    hold: () => { if (radio.connected) radio.setFine(s.fn === 2 ? 0 : 2); else { ui.fast = !ui.fast; ui.fine = false; } },
+  },
   step: () => {
     cfg.step = STEPS[(STEPS.indexOf(cfg.step) + 1) % STEPS.length];
     save();
@@ -702,7 +768,9 @@ async function toggleConnect() {
     $('#btnConnect').classList.add('busy');
     const baud = await radio.connect(port, cfg.catBaud);
     if (!audio.rx) startRxAudio({ quiet: true });
-    toast(`CAT接続しました（${baud}bps${s.id && s.id !== '0840' ? ` / ID ${s.id}: FTX-1ではない可能性` : ''}）`, s.id && s.id !== '0840');
+    // ID answer: 0800 per the CAT manual (some firmware/Hamlib report 0840)
+    const notFtx1 = s.id && !['0800', '0840'].includes(s.id);
+    toast(`CAT接続しました（${baud}bps${notFtx1 ? ` / ID ${s.id}: FTX-1ではない可能性` : ''}）`, notFtx1);
   } catch (e) {
     if (e.code === 'NO_REPLY') {
       toast(cfg.catBaud === 'auto'
@@ -937,6 +1005,20 @@ function setupSettings() {
   con.checked = cfg.console;
   $('#panelConsole').hidden = !cfg.console;
   con.addEventListener('change', () => { cfg.console = con.checked; $('#panelConsole').hidden = !cfg.console; save(); });
+  $('#btnRadioBaud').addEventListener('click', async () => {
+    const rate = +$('#radioBaud').value;
+    if (!radio.connected) { toast('CATが接続されていません', true); return; }
+    if (!confirm(`本体の CAT-1 / CAT-2 ボーレートを ${rate}bps に変更して再接続します。よろしいですか？`)) return;
+    try {
+      await radio.setRadioBaud(rate);
+      cfg.catBaud = rate;
+      $('#baud').value = String(rate);
+      save();
+      toast(`本体の CAT-1 / CAT-2 を ${rate}bps にしました`);
+    } catch (e) {
+      toast(`変更後の再接続に失敗しました: ${e.message}（POWER で接続し直してください）`, true);
+    }
+  });
   $('#btnPttPort').addEventListener('click', togglePttPort);
   $('#btnConnect').addEventListener('click', toggleConnect);
 }
@@ -1000,6 +1082,22 @@ function setupDecoder() {
 // ---------------- right sidebar (USB AUDIO / SETUP) ----------------
 function setupSidebar() {
   $('#appVer').textContent = `v${APP_VERSION}`;
+  $('#sbVer').textContent = `v${APP_VERSION}`;
+  // the last rejected command, shown next to the error count
+  // every rejection since connecting, shown together (the newest one used to overwrite the earlier ones)
+  ui.errs = [];
+  radio.addEventListener('connection', () => { if (radio.connected) ui.errs = []; });
+  radio.addEventListener('log', (e) => {
+    if (e.detail.dir !== 'err' || !e.detail.text.startsWith('?')) return;
+    ui.errs = [...ui.errs, e.detail.text.replace(/^\? \(rejected: (.*)\)$/, '$1')].slice(-6);
+  });
+  $('#sbErr').addEventListener('click', () => {
+    cfg.console = true;
+    save();
+    $('#showConsole').checked = true;
+    $('#panelConsole').hidden = false;
+    $('#panelConsole').scrollIntoView({ behavior: 'smooth', block: 'end' });
+  });
   const app = $('#app');
   const narrow = matchMedia('(max-width: 900px)');
   app.classList.toggle('nomenu', !cfg.sidebar);
@@ -1028,49 +1126,70 @@ function statusHtml() {
   const swrHigh = s.tx && s.meters[6] > 126;
   const items = [
     s.lock && ['LOCK', ''],
-    swrHigh && ['HI-SWR', 'warn'],
+    (swrHigh || s.ri?.hiswr) && ['HI-SWR', 'warn'],
     ui.fine && ['FINE', 'inv'],
     ui.fast && ['FAST', 'inv'],
     s.vox && ['VOX', ''],
-    s.tuner && ['TUNE', ''],
+    s.tuner && ['TUNE', s.ri?.tuning ? 'blink' : ''],
     s.bkin && ['BK-IN', ''],
     isSplit() && ['SPLIT', ''],
   ].filter(Boolean);
+  // radio indicators only; the app's own state (CAT link, errors, clock) is in the window status bar
+  return items.map(([t, c]) => `<span class="si ${c}">${t}</span>`).join('') + '<span class="sp"></span>';
+}
+
+// window status bar: CAT link / USB audio / CAT errors / clock / version
+// (text is only written when it changes, so a selection in the bar survives and can be copied)
+const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
+function drawStatusbar() {
+  const conn = radio.connected;
+  const cat = $('#sbCat');
+  cat.classList.toggle('on', conn);
+  setText(cat.lastChild, conn ? `${radio.baud}bps${s.ai ? ' · AI' : ''}${s.id ? ` · ID ${s.id}` : ''}` : '未接続');
+  const au = $('#sbAudio');
+  au.classList.toggle('on', !!audio.rx);
+  setText(au.lastChild, audio.rx ? `RX${audio.rx.muted ? ' (MUTE)' : ''}${audio.tx ? ' · TX' : ''}` : (audio.tx ? 'TX' : '停止'));
+  const err = $('#sbErr');
+  err.hidden = !s.errors;
+  setText(err, `CAT ERR ${s.errors}`);
+  setText($('#sbMsg'), s.errors && ui.errs?.length ? `拒否されたコマンド: ${ui.errs.join(' ')}` : '');
   const d = new Date();
-  const clk = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  const link = radio.connected ? `CAT ${radio.baud}${s.ai ? ' AI' : ''}` : 'CAT OFF';
-  return items.map(([t, c]) => `<span class="si ${c}">${t}</span>`).join('')
-    + `<span class="sp"></span>${s.errors ? `<span class="si warn">ERR ${s.errors}</span>` : ''}`
-    + `<span class="link ${radio.connected ? 'on' : ''}">${link}</span><span class="clk">${clk}</span>`;
+  setText($('#sbClock'), `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`);
 }
 
 function draw() {
   const conn = radio.connected;
   $('#btnConnect').classList.toggle('on', conn);
   const lcd = $('#lcd');
-  lcd.className = `lcd lay-${cfg.layout}${cfg.layout === 'single' && s.vs === 1 ? ' only-sub' : ''}`;
+  const lcdCls = `lcd lay-${cfg.layout}${cfg.layout === 'single' && s.vs === 1 ? ' only-sub' : ''}${conn ? '' : ' off'}`;
+  if (lcd.className !== lcdCls) { lcd.className = lcdCls; requestAnimationFrame(fitFreq); }
 
   const st = statusHtml();
   if ($('#stBar').innerHTML !== st) $('#stBar').innerHTML = st;
+  drawStatusbar();
 
   for (let v = 0; v < 2; v++) {
     const band = $(`#band${v}`);
     band.classList.toggle('sel', s.vs === v);
     band.querySelector('.b-mode').textContent = MODE_NAME[s.mode[v]] || '---';
+    // VFO / memory channel tag (IF/OI P7, P1)
+    const vm = s.vm[v], chn = /^\d+$/.test(vm.ch) ? `M-${String(+vm.ch).padStart(3, '0')}` : vm.ch;
+    setText(band.querySelector('.tg-vfo'), !conn ? 'VFO' : vm.t === 1 ? chn : vm.t === 2 ? 'MT' : vm.t === 3 ? 'QMB' : vm.t === 5 ? `PMS ${vm.ch}` : 'VFO');
     const html = freqHtml(s.freq[v]);
-    if (html !== lastFreqHtml[v]) { $(`#freq${v}`).innerHTML = html; lastFreqHtml[v] = html; }
+    if (html !== lastFreqHtml[v]) { $(`#freq${v}`).innerHTML = html; lastFreqHtml[v] = html; fitFreq(); }
     // the transmitting side's frequency turns red, as on the radio
     $(`#freq${v}`).classList.toggle('tx', (s.tx || ui.ptt) && s.ft === v);
     const tr = $(`#txrx${v}`);
     const rxOn = v === s.vs || s.dual;
     tr.textContent = s.ft === v ? (s.tx ? 'TX' : 'TXRX') : 'RX';
     tr.className = `b-txrx${s.tx && s.ft === v ? ' tx' : s.ft === v ? '' : rxOn ? ' rx' : ' off'}`;
-    for (const { t, b, span } of rxTileEls[v]) {
+    for (const { t, el, b, span } of rxTileEls[v]) {
       b.textContent = t.label(v);
       span.textContent = t.value(v);
+      el.classList.toggle('na', !!t.na?.(v)); // item names are yellow; white where the item does not apply
     }
   }
-  $('#funcBox').textContent = val(PARAMS[cfg.func].name).replace(/ (MAIN|SUB)$/, '');
+  $('#funcBox').textContent = funcName();
 
   drawMeters();
   drawFilters();
@@ -1096,7 +1215,8 @@ function draw() {
   const clarOn = s.clarRx[s.vs] || s.clarTx[s.vs];
   $('#vfoArc').className = `vfo-arc ${conn ? (clarOn || isSplit() ? 'red' : s.vs ? 'green' : 'blue') : ''}`;
   for (let v = 0; v < 2; v++) {
-    const busy = !s.tx && (v === 0 || s.dual) && s.smeter[v] > Math.max(12, s.sql[v] / 2);
+    // MAIN: squelch state from RI; SUB (no CAT read for it): estimated from the S meter
+    const busy = conn && !s.tx && (v === 0 ? (s.ri ? s.ri.busy : s.smeter[0] > Math.max(12, s.sql[0] / 2)) : s.dual && s.smeter[1] > Math.max(12, s.sql[1] / 2));
     $(`#ledBusy${v}`).className = s.tx && s.ft === v ? 'red' : busy ? 'green' : '';
   }
 
@@ -1108,10 +1228,12 @@ function draw() {
   $('#cwWpm').textContent = `${s.ks} WPM`;
   $('#catErr').textContent = `ERR ${s.errors}`;
   $('#catErr').classList.toggle('err', s.errors > 0);
-  $('#scInfo').textContent = `AF-FFT  ${MODE_NAME[s.mode[s.vs]] || ''}  SPAN ${cfg.scopeSpan / 1000}kHz`;
+  // the radio's scope settings line (e.g. "CENTER FAST2 SPAN 100kHz")
+  $('#scInfo').textContent = `${SC_DMODE[scopeDmode()]} ${SC_SPEED[+s.scope[0]] || ''} SPAN ${(SC_SPAN[s.scope[5]] || '').replace('k', 'kHz').replace('M', 'MHz')}`;
 }
 
 radio.addEventListener('change', () => {
+  if (radio.connected) { ui.fine = s.fn === 1; ui.fast = s.fn === 2; }
   if (s.nb[V()] > 0) ui.lastNb = s.nb[V()];
   if (s.nr[V()] > 0) ui.lastNr = s.nr[V()];
   render();
@@ -1120,6 +1242,7 @@ setInterval(render, 250);
 
 // ---------------- boot ----------------
 if (!('serial' in navigator)) $('#unsupported').hidden = false;
+installDigitGlyphs();
 setupSoftbar();
 setupBands();
 setupEntry();
