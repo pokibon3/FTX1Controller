@@ -30,13 +30,16 @@ const DEFAULTS = {
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'lr', layoutV2: true,
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
-  sidebar: true, sections: {}, afFft: true, dec: true, decCh: 'L', decGain: 0, console: false,
+  sidebar: false, sections: {}, afFft: true, dec: true, decCh: 'L', decGain: 0, console: false,
 };
 const cfg = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
 })();
 if (!['auto', 1, 10, 20, 50, 100, 200, 500, 1000, 2500, 5000, 6250, 10000, 12500, 25000].includes(cfg.step)) cfg.step = 'auto';
 if (![3, 4, 5, 6, 7, 8].includes(cfg.meterSel)) cfg.meterSel = 5;
+// CAT CONSOLE and the side panel always start closed (they open on demand: SETUP checkbox / ☰)
+cfg.console = false;
+cfg.sidebar = false;
 // v1.6: the default screen became L/R (as on the radio); switch saved settings over once
 if (!cfg.layoutV2) { cfg.layout = 'lr'; cfg.layoutV2 = true; }
 function save() { try { localStorage.setItem('ftx1.cfg', JSON.stringify(cfg)); } catch {} }
