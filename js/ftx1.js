@@ -133,8 +133,9 @@ function initialState() {
 }
 
 const POLL_PREFIX = /^(SM|RM)/;
-// reads the radio rejects in some modes (MG; is refused in CW): a "?;" for these is logged, not counted
-const MODE_DEPENDENT = /^MG;/;
+// reads the radio rejects in some modes or bands: a "?;" for these is logged, not counted.
+// MG; is refused in CW; RA (attenuator) works on HF/50 MHz only (CAT manual 2512-D)
+const MODE_DEPENDENT = /^(MG|RA)/;
 
 export class FTX1 extends EventTarget {
   constructor() {
@@ -307,7 +308,8 @@ export class FTX1 extends EventTarget {
   }
   _levelPoll() {
     const p = { poll: true };
-    ['AG0;', 'AG1;', 'SQ0;', 'SQ1;', 'RG0;', 'PC;', 'FT;', 'FR;', 'LK;', 'NL0;', 'RL0;', 'NA0;', 'RA0;',
+    if (bandType(this.s.freq[0]) === 0) this.send('RA0;', p);
+    ['AG0;', 'AG1;', 'SQ0;', 'SQ1;', 'RG0;', 'PC;', 'FT;', 'FR;', 'LK;', 'NL0;', 'RL0;', 'NA0;',
       `PA${bandType(this.s.freq[this.s.vs])};`, 'GT0;', 'SH0;', 'SH1;', 'SF0;', 'FN;', 'MS;', 'ML0;', 'ML1;', 'CS;',
       'SS00;', 'SS01;', 'SS03;', 'SS04;', 'SS05;', 'SS06;', 'DA;', 'PL;', 'AO;', 'VD;', 'SD;'].forEach((c) => this.send(c, p));
   }
@@ -321,7 +323,7 @@ export class FTX1 extends EventTarget {
       // the oldest read still waiting for its answer is the one the radio rejected
       const bad = (this.pending || []).shift();
       if (bad && MODE_DEPENDENT.test(bad)) {
-        this._emit('log', { dir: 'sys', text: `${bad} not available in this mode` });
+        this._emit('log', { dir: 'sys', text: `${bad} not available in this mode / band` });
         return;
       }
       s.errors++;
