@@ -56,13 +56,13 @@ const signed = (v, unit) => `${v > 0 ? '+' : ''}${v}${unit}`;
 
 // ---------------- toast ----------------
 let toastTimer;
-function toast(msg, err = false) {
+function toast(msg, err = false, ms = 3200) {
   const t = $('#toast');
   t.textContent = msg;
   t.classList.toggle('err', err);
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
+  toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
 
 // ---------------- parameters (FUNC knob targets) ----------------
@@ -1258,16 +1258,22 @@ setupSidebar();
 setupDecoder();
 render();
 
-// PWA install button (Chrome / Edge): shown while the app can be installed and is not already running as one
+// PWA install button: always shown unless running as the installed app. Chrome only hands the page an install
+// prompt now and then (not after it was dismissed, not when already installed), so without one the button explains
+// where Chrome's own install menu is.
 let installEvt = null;
-window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; $('#btnInstall').hidden = false; });
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+$('#btnInstall').hidden = standalone();
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
 window.addEventListener('appinstalled', () => { installEvt = null; $('#btnInstall').hidden = true; toast('アプリとしてインストールしました'); });
 $('#btnInstall').addEventListener('click', async () => {
-  if (!installEvt) return;
-  installEvt.prompt();
-  await installEvt.userChoice.catch(() => {});
-  installEvt = null;
-  $('#btnInstall').hidden = true;
+  if (installEvt) {
+    installEvt.prompt();
+    await installEvt.userChoice.catch(() => {});
+    installEvt = null;
+    return;
+  }
+  toast('Chrome のメニュー（右上の ⋮）→「キャスト、保存、共有」→「ページをアプリとしてインストール」から入れてください。インストール済みの場合は chrome://apps から起動できます', false, 9000);
 });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
