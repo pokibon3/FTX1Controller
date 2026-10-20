@@ -10,7 +10,7 @@ import { FtxMeter } from './ftxmeter.js';
 import { FilterDisplay } from './filterdisp.js';
 import { APP_VERSION } from './version.js';
 import { CwDecoder } from './cwdecoder.js';
-import { Ft8Decoder, ft8Wave, SLOT } from './ft8.js';
+import { Ft8Decoder, ft8Wave } from './ft8.js';
 import { installDigitGlyphs } from './digits.js';
 import { EX_MENUS } from './exmenu.js';
 
@@ -32,7 +32,7 @@ const DEFAULTS = {
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'lr', layoutV2: true,
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
-  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, dec: true, decCh: 'L', decGain: 0, console: false,
+  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, ft8Mode: 'FT8', dec: true, decCh: 'L', decGain: 0, console: false,
 };
 const cfg = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
@@ -1290,11 +1290,15 @@ function setupVfoKeys() {
 // ---------------- FT8 (receive on RX audio, transmit on TX audio) ----------------
 function setupFt8() {
   const ft8 = new Ft8Decoder();
+  ft8.setMode(cfg.ft8Mode);
+  // slot length (ms) and, per protocol, how late a transmission may still start / switch message, and when it must end
+  const SL = () => ft8.slot;
+  const TXT = () => (ft8.ft4 ? { late: 1000, restart: 1200, end: 7000 } : { late: 2000, restart: 2500, end: 14000 });
   const list = $('#ft8List');
   const strip = (c) => (c || '').replace(/[<>]/g, '');
   const isGrid = (x) => /^[A-R]{2}\d{2}$/.test(x) && x !== 'RR73';
   const fmtRpt = (db) => { const v = clamp(Math.round(db), -30, 49); return `${v < 0 ? '-' : '+'}${String(Math.abs(v)).padStart(2, '0')}`; };
-  const utcOf = (slot) => new Date(slot * SLOT).toISOString().slice(11, 19).replace(/:/g, '');
+  const utcOf = (slot) => new Date(slot * SL()).toISOString().slice(11, 19).replace(/:/g, '');
   const toMe = (text) => !!cfg.ft8My && strip(text.split(' ')[0]) === cfg.ft8My;
   let rows = [];
   const draw = () => {
@@ -1344,7 +1348,7 @@ function setupFt8() {
   $('#btnFt8Clr').addEventListener('click', () => { rows = []; draw(); });
   $('#ft8Cq').checked = cfg.ft8Cq;
   $('#ft8Cq').addEventListener('change', (e) => { cfg.ft8Cq = e.target.checked; save(); draw(); });
-  setInterval(() => { $('#ft8Bar').style.width = `${(ft8.secInSlot / 15) * 100}%`; }, 200);
+  setInterval(() => { $('#ft8Bar').style.width = `${(ft8.secInSlot * 1000 / SL()) * 100}%`; }, 200);
   sync();
 
   // ---- transmit ----
@@ -1366,7 +1370,7 @@ function setupFt8() {
     $('#ft8Dx').value = tx.dx;
     $('#ft8Rpt').value = tx.rpt;
     $('#btnFt8Tx').classList.toggle('on', tx.on);
-    $('#btnFt8Per').textContent = cfg.ft8Per ? '15/45' : '00/30';
+    $('#btnFt8Per').textContent = ft8.ft4 ? (cfg.ft8Per ? '07/22' : '00/15') : (cfg.ft8Per ? '15/45' : '00/30');
     $('#ft8TxTag').hidden = !tx.cur;
   };
   // the station a decoded message comes from (for CQ: the call before the grid), and its grid
@@ -1414,7 +1418,7 @@ function setupFt8() {
     respond(r);
     drawTx();
     // decoding ends after our slot has begun: switch the message if the transmission is still young (WSJT-X does too)
-    if (tx.cur && tx.on && tx.msgs[tx.sel] !== before && Date.now() % SLOT < 2500) restart();
+    if (tx.cur && tx.on && tx.msgs[tx.sel] !== before && Date.now() % SL() < TXT().restart) restart();
   };
 
   const problem = () => {
@@ -1425,9 +1429,9 @@ function setupFt8() {
   };
   const play = (cur, tones) => {
     const ctx = audio.tx.ctx;
-    const at = Math.max(cur.slot * SLOT + 500, Date.now() + 50);
+    const at = Math.max(cur.slot * SL() + 500, Date.now() + 50);
     const when = ctx.currentTime + (at - Date.now()) / 1000 - (ctx.outputLatency || ctx.baseLatency || 0);
-    const p = audio.playWave(ft8Wave(tones, +cfg.ft8TxHz, ctx.sampleRate, +cfg.ft8Lvl), when);
+    const p = audio.playWave(ft8Wave(tones, +cfg.ft8TxHz, ctx.sampleRate, +cfg.ft8Lvl, ft8.ft4), when);
     cur.play = p;
     p.done.then(() => { if (cur.play === p) setTimeout(() => end(cur), 100); });
   };
@@ -1445,12 +1449,12 @@ function setupFt8() {
     if (err) { tx.on = false; toast(err, true); drawTx(); return; }
     if (!audio.tx && !(await startTxAudio())) { tx.on = false; drawTx(); return; }
     const sel = tx.sel, enc = await encode(tx.msgs[sel]);
-    if (!enc || !tx.on || Math.floor(Date.now() / SLOT) !== slot) return;
+    if (!enc || !tx.on || Math.floor(Date.now() / SL()) !== slot) return;
     const cur = { slot, sel, text: enc.text, play: null };
     tx.cur = cur;
     ft8.txSlot = slot;
     // safety: never past the slot, whatever happens to the audio
-    cur.timer = setTimeout(() => end(cur), slot * SLOT + 14000 - Date.now());
+    cur.timer = setTimeout(() => end(cur), slot * SL() + TXT().end - Date.now());
     await setPtt(true);
     if (!ui.ptt) { end(cur); return; }
     try { play(cur, enc.tones); } catch (e) { tx.on = false; end(cur, true); toast(`FT8 送信失敗: ${e.message}`, true); return; }
@@ -1486,8 +1490,8 @@ function setupFt8() {
   // timers are throttled in a hidden window, so the slot timing could not be kept
   document.addEventListener('visibilitychange', () => { if (document.hidden && tx.on) { tx.on = false; drawTx(); } });
   setInterval(() => {
-    const now = Date.now(), slot = Math.floor(now / SLOT);
-    if (!tx.on || tx.cur || tx.lastSlot === slot || slot % 2 !== cfg.ft8Per || now % SLOT > 2000) return;
+    const now = Date.now(), slot = Math.floor(now / SL());
+    if (!tx.on || tx.cur || tx.lastSlot === slot || slot % 2 !== cfg.ft8Per || now % SL() > TXT().late) return;
     tx.lastSlot = slot;
     begin(slot);
   }, 100);
@@ -1518,6 +1522,20 @@ function setupFt8() {
   });
   $('#btnFt8Halt').addEventListener('click', () => { tx.on = false; end(tx.cur, true); drawTx(); });
   $('#btnFt8Per').addEventListener('click', () => { cfg.ft8Per = 1 - cfg.ft8Per; save(); drawTx(); });
+  // FT8 / FT4: TX stops, the list starts over (slot numbers differ)
+  const drawMode = () => {
+    $('#ft8Title').textContent = ft8.mode;
+    $('#btnFt8Mode').textContent = ft8.mode;
+  };
+  $('#btnFt8Mode').addEventListener('click', () => {
+    tx.on = false; end(tx.cur, true);
+    cfg.ft8Mode = ft8.mode === 'FT8' ? 'FT4' : 'FT8'; save();
+    ft8.setMode(cfg.ft8Mode);
+    rows = []; draw(); $('#ft8Info').textContent = '--';
+    tx.lastSlot = -1; tx.repeat = 0;
+    drawMode(); drawTx();
+  });
+  drawMode();
   gen();
   drawTx();
 }

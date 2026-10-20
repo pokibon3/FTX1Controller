@@ -192,6 +192,8 @@ int ftx_find_candidates(const ftx_waterfall_t* wf, int num_candidates, ftx_candi
     int (*sync_fun)(const ftx_waterfall_t*, const ftx_candidate_t*) = (wf->protocol == FTX_PROTOCOL_FT4) ? ft4_sync_score : ft8_sync_score;
     int num_tones = (wf->protocol == FTX_PROTOCOL_FT4) ? 4 : 8;
 
+    // [FTX-1 Controller patch] FT4 symbols are 48 ms: 20 of them reach only 0.96 s, so search FT4 starts up to 1.92 s
+    int max_time_offset = (wf->protocol == FTX_PROTOCOL_FT4) ? 40 : 20;
     int heap_size = 0;
     ftx_candidate_t candidate;
 
@@ -202,7 +204,7 @@ int ftx_find_candidates(const ftx_waterfall_t* wf, int num_candidates, ftx_candi
     {
         for (candidate.freq_sub = 0; candidate.freq_sub < wf->freq_osr; ++candidate.freq_sub)
         {
-            for (candidate.time_offset = -10; candidate.time_offset < 20; ++candidate.time_offset)
+            for (candidate.time_offset = -10; candidate.time_offset < max_time_offset; ++candidate.time_offset)
             {
                 for (candidate.freq_offset = 0; (candidate.freq_offset + num_tones - 1) < wf->num_bins; ++candidate.freq_offset)
                 {

@@ -12,7 +12,7 @@ for f in ft8_lib/ft8/decode.c ft8_lib/ft8/encode.c ft8_lib/ft8/ldpc.c ft8_lib/ft
          ft8_lib/common/monitor.c ft8_lib/fft/kiss_fft.c ft8_lib/fft/kiss_fftr.c api.c support.c; do
   o="$TMP/$(basename "$f").o"; clang $CFLAGS -c "$f" -o "$o"; OBJS="$OBJS $o"
 done
-EX=""; for e in ft8_init ft8_block_ptr ft8_block_size ft8_process ft8_blocks ft8_reset ft8_results_ptr ft8_result_size ft8_decode ft8_tx_text_ptr ft8_tx_tones_ptr ft8_tx_encode; do EX="$EX --export=$e"; done
+EX=""; for e in ft8_init ft8_block_ptr ft8_block_size ft8_process ft8_blocks ft8_reset ft8_results_ptr ft8_result_size ft8_decode ft8_nsym ft8_tx_text_ptr ft8_tx_tones_ptr ft8_tx_encode; do EX="$EX --export=$e"; done
 mkdir -p "$(dirname "$OUT")"
 "$WASM_LD" --no-entry --lto-O2 -z stack-size=1048576 --initial-memory=16777216 $EX $OBJS -o "$OUT"
 chmod 644 "$OUT"

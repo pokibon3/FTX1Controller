@@ -664,7 +664,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .ft8-row.first { border-top: 1px solid #1d2024; }
 .ft8-row.cq span:last-child { color: #7fe39a; }
 .ft8-row span:nth-child(2), .ft8-row span:nth-child(3), .ft8-row span:nth-child(4) { text-align: right; }
-.ft8-keys { grid-template-columns: 90px 70px auto; justify-content: start; align-items: center; }
+.ft8-keys { grid-template-columns: 90px 60px 70px auto; justify-content: start; align-items: center; }
 .ft8-row:not(.tx) { cursor: pointer; }
 .ft8-row:not(.tx):hover { background: #12161b; }
 .ft8-row.me span:last-child { color: #ff8a80; font-weight: 700; }
