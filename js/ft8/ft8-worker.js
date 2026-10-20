@@ -20,7 +20,7 @@ onmessage = async ({ data: m }) => {
     for (let i = 0; i < n; i++) {
       const dv = new DataView(e.memory.buffer, rp + i * rs, rs);
       const tb = new Uint8Array(e.memory.buffer, rp + i * rs + 16, 40);
-      out.push({ score: dv.getInt32(12, true), dt: dv.getFloat32(4, true), freq: dv.getFloat32(8, true), text: new TextDecoder().decode(tb.subarray(0, tb.indexOf(0))) });
+      out.push({ snr: dv.getFloat32(0, true), dt: dv.getFloat32(4, true), freq: dv.getFloat32(8, true), text: new TextDecoder().decode(tb.subarray(0, tb.indexOf(0))) });
     }
     postMessage({ type: 'decoded', slot: m.slot, blocks, list: out });
   }

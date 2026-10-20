@@ -117,3 +117,4 @@ float atan2f(float y, float x) {
   return (float)(y < 0 ? -a : a);
 }
 void exit(int code) { (void)code; __builtin_trap(); }
+double fmod(double x, double y) { return x - y * __builtin_trunc(x / y); }

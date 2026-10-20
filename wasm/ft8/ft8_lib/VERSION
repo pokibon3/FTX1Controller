@@ -1,1 +1,2 @@
 ft8_lib 9fec6ca (https://github.com/kgoba/ft8_lib), MIT
+patched: ftx_candidate_llr() added to ft8/decode.c for the OSD decoder in api.c

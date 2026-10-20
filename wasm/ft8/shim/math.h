@@ -20,3 +20,4 @@ float logf(float x);
 float log10f(float x);
 float powf(float x, float y);
 float atan2f(float y, float x);
+double fmod(double x, double y);

@@ -61,7 +61,7 @@ CW モードのときだけ、CW 送信（左）と CW 受信（右）のパネ�
 ### FT8 デコーダ（受信）
 
 DATA-U / DATA-L のとき FT8 パネルが表示され、USB AUDIO RX の受信音を 15 秒ごと（UTC :00 / :15 / :30 / :45）に解読して一覧表示します。
-デコーダは [ft8_lib](https://github.com/kgoba/ft8_lib)（MIT）を WebAssembly 化したもの（`wasm/ft8/`、ビルドは `sh wasm/ft8/build.sh`）。
+デコーダは [ft8_lib](https://github.com/kgoba/ft8_lib)（MIT）を WebAssembly 化し、WSJT-X と同じく精密同期・OSD 復号・信号の引き算による 3 パス解読を追加したもの（`wasm/ft8/`、ビルドは `sh wasm/ft8/build.sh`）。テスト録音で WSJT-X の解読結果の 93% を解読します。
 PC の時計が ±1 秒以内に合っている必要があります。送信には対応していません。
 
 ## 本体との連動

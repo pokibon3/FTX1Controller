@@ -324,6 +324,13 @@ static void ftx_normalize_logl(float* log174)
     }
 }
 
+// [FTX-1 Controller patch] the normalized bit log-likelihoods of a candidate, for an external OSD decoder
+void ftx_candidate_llr(const ftx_waterfall_t* wf, const ftx_candidate_t* cand, float* log174)
+{
+    ft8_extract_likelihood(wf, cand, log174);
+    ftx_normalize_logl(log174);
+}
+
 bool ftx_decode_candidate(const ftx_waterfall_t* wf, const ftx_candidate_t* cand, int max_iterations, ftx_message_t* message, ftx_decode_status_t* status)
 {
     float log174[FTX_LDPC_N]; // message bits encoded as likelihood

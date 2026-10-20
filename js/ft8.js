@@ -53,9 +53,8 @@ export class Ft8Decoder extends EventTarget {
   _decoded(m) {
     const start = new Date(m.slot * SLOT);
     const utc = `${String(start.getUTCHours()).padStart(2, '0')}${String(start.getUTCMinutes()).padStart(2, '0')}${String(start.getUTCSeconds()).padStart(2, '0')}`;
-    // ft8_lib reports a sync score; this maps it roughly onto WSJT-X's S/N scale (calibrated on ft8_lib's test files).
-    // DT: ft8_lib's start time minus the 0.5 s nominal offset and the measured ~0.15 s analysis lag.
-    const rows = m.list.map((r) => ({ utc, snr: Math.max(-24, Math.min(30, Math.round(r.score * 0.9 - 29))), dt: r.dt - 0.65, freq: Math.round(r.freq), text: r.text }))
+    // S/N and DT come from the decoder's fine synchronisation, on WSJT-X's scales
+    const rows = m.list.map((r) => ({ utc, snr: Math.round(r.snr), dt: r.dt, freq: Math.round(r.freq), text: r.text }))
       .sort((a, b) => a.freq - b.freq);
     this.dispatchEvent(new CustomEvent('decoded', { detail: { utc, rows, blocks: m.blocks } }));
   }
