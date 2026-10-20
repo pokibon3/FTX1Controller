@@ -381,6 +381,9 @@ button { font: inherit; color: inherit; }
 .lcd.lay-lr .b-filt { border: .15cqi solid #4a4d52; border-radius: .2cqi; margin: .2cqi 0 .6cqi; }
 .lcd.lay-lr .st-bar { font-size: 2cqi; }
 .lcd.lay-single .band { grid-template-rows: 2.8cqi 11cqi 8cqi; }
+/* single / U-D screens: the reading is right-aligned and may run left up to the S meter (a 3-digit MHz reading such
+   as 433.700.000 starts right beside the meter on the radio), so the digits keep their size */
+.lcd:not(.lay-lr) .b-freq { grid-column: 1 / -1; padding-left: 39.5cqi; justify-content: flex-end; }
 /* single / U-D screens, measured on the manual's pictures (p.18): digit height 14.6% of the screen (8.2cqi),
    Hz digits half the height */
 .lcd.lay-single .freq { font-size: 11.4cqi; }
