@@ -613,6 +613,13 @@ function setupKnobs() {
     const k = new Knob($(`#knAF${v}`), {
       onTurn: (n) => {
         const kind = knobMode(v);
+        if (kind === 'af' && cfg.spkMute) {
+          // radio speaker muted: the AF knobs set the PC playback volume instead
+          cfg.rxVol = clamp(Math.round((cfg.rxVol + n * 0.03) * 100) / 100, 0, 2);
+          $('#rxVol').value = cfg.rxVol; audio.setRxVolume(cfg.rxVol); save();
+          popup('PC VOLUME', `${Math.round(cfg.rxVol * 50)}%`, cfg.rxVol / 2);
+          return;
+        }
         const cur = kind === 'af' ? s.af[v] : kind === 'rf' ? s.rf[v] : s.sql[v];
         const nv = clamp(cur + n * 4, 0, 255);
         if (kind === 'af') radio.setAF(v, nv); else if (kind === 'rf') radio.setRF(v, nv); else radio.setSQL(v, nv);
@@ -1018,6 +1025,17 @@ function setupAudio() {
     audio.setRxMute(!audio.rx.muted);
     audio.dispatchEvent(new Event('state'));
   });
+  // radio speaker mute: AF GAIN 0 on both sides (the USB audio level is set by the menu's USB OUT LEVEL, not AF GAIN);
+  // the previous AF GAIN comes back when unchecked
+  $('#spkMute').checked = !!cfg.spkMute;
+  const applyMute = () => {
+    if (!radio.connected) return;
+    if (cfg.spkMute) { cfg.afSaved = s.af.some((x) => x > 0) ? [...s.af] : cfg.afSaved; radio.setAF(0, 0); radio.setAF(1, 0); }
+    else if (cfg.afSaved) { radio.setAF(0, cfg.afSaved[0]); radio.setAF(1, cfg.afSaved[1]); }
+    save();
+  };
+  $('#spkMute').addEventListener('change', (e) => { cfg.spkMute = e.target.checked; applyMute(); render(); });
+  radio.addEventListener('connection', () => { if (radio.connected && cfg.spkMute) setTimeout(applyMute, 1500); });
   $('#rxVol').addEventListener('input', (e) => { cfg.rxVol = +e.target.value; audio.setRxVolume(cfg.rxVol); save(); });
   $('#btnRec').addEventListener('click', () => { if (audio.recorder) audio.stopRecording(); else audio.startRecording(); });
   audio.addEventListener('recording', (e) => {
@@ -1388,7 +1406,7 @@ function draw() {
 
   for (const { k, v } of afKnobs) {
     const kind = knobMode(v);
-    if (!k.active) k.setFraction((kind === 'af' ? s.af[v] : kind === 'rf' ? s.rf[v] : s.sql[v]) / 255);
+    if (!k.active) k.setFraction(kind === 'af' && cfg.spkMute ? cfg.rxVol / 2 : (kind === 'af' ? s.af[v] : kind === 'rf' ? s.rf[v] : s.sql[v]) / 255);
     $(`#knAF${v}mode`).textContent = kind.toUpperCase();
   }
 
