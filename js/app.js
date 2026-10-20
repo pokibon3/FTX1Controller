@@ -27,7 +27,7 @@ const meters = [new FtxMeter($('#meter0')), new FtxMeter($('#meter1'))];
 const DEFAULTS = {
   catBaud: 'auto', step: 'auto', dialRes: 250, pttMethod: 'cat1', tot: 180,
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
-  showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'ud',
+  showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'lr', layoutV2: true,
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
   sidebar: true, sections: {}, afFft: true, dec: true, decCh: 'L', decGain: 0, console: false,
 };
@@ -36,6 +36,8 @@ const cfg = (() => {
 })();
 if (!['auto', 1, 10, 20, 50, 100, 200, 500, 1000, 2500, 5000, 6250, 10000, 12500, 25000].includes(cfg.step)) cfg.step = 'auto';
 if (![3, 4, 5, 6, 7, 8].includes(cfg.meterSel)) cfg.meterSel = 5;
+// v1.6: the default screen became L/R (as on the radio); switch saved settings over once
+if (!cfg.layoutV2) { cfg.layout = 'lr'; cfg.layoutV2 = true; }
 function save() { try { localStorage.setItem('ftx1.cfg', JSON.stringify(cfg)); } catch {} }
 
 const STEPS = ['auto', 1, 10, 50, 100, 500, 1000, 2500, 5000, 6250, 10000, 12500, 25000];
