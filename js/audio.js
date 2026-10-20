@@ -159,6 +159,27 @@ export class AudioEngine extends EventTarget {
     this.tx.toneGain.gain.setTargetAtTime(on ? 0.5 : 0, this.tx.ctx.currentTime, 0.01);
   }
 
+  // play generated audio (FT8) into the TX path at AudioContext time `when`; the microphone is muted meanwhile.
+  // Returns { done: Promise (resolves when it has played or was stopped), stop() }.
+  playWave(samples, when) {
+    const tx = this.tx;
+    if (!tx) throw new Error('TXオーディオが開始されていません');
+    const buf = tx.ctx.createBuffer(1, samples.length, tx.ctx.sampleRate);
+    buf.copyToChannel(samples, 0);
+    const node = tx.ctx.createBufferSource();
+    node.buffer = buf;
+    node.connect(tx.gate);
+    node.connect(tx.analyser);
+    tx.micGain.gain.setTargetAtTime(0, tx.ctx.currentTime, 0.01);
+    let stopped = false;
+    const done = new Promise((res) => { node.onended = res; }).then(() => {
+      try { node.disconnect(); } catch {}
+      if (this.tx === tx && !tx.tone) tx.micGain.gain.setTargetAtTime(this._txGain ?? 1, tx.ctx.currentTime, 0.01);
+    });
+    node.start(Math.max(when, tx.ctx.currentTime));
+    return { done, stop: () => { if (!stopped) { stopped = true; try { node.stop(); } catch {} } } };
+  }
+
   txLevel() { return this.tx ? rms(this.tx.analyser, this._tbuf) : null; }
 
   // ---- recording ----

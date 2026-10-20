@@ -350,3 +350,21 @@ EXPORT int ft8_decode(void) {
   ht_cleanup(10);
   return nres;
 }
+
+// ---- transmit: pack a message text into the 79 FT8 tones (the GFSK waveform is synthesised in JS) ----
+static char tx_text[kTextLen];
+static uint8_t tx_tones[NSYM];
+EXPORT char *ft8_tx_text_ptr(void) { return tx_text; }
+EXPORT uint8_t *ft8_tx_tones_ptr(void) { return tx_tones; }
+// in: tx_text (NUL-terminated, upper case). out: tx_tones, and tx_text rewritten as the message unpacks
+// (what the other station will see). Returns the ftx_message_rc_t (0 = OK).
+EXPORT int ft8_tx_encode(void) {
+  ftx_message_t msg;
+  tx_text[kTextLen - 1] = 0;
+  int rc = ftx_message_encode(&msg, &hash_if, tx_text);
+  if (rc != FTX_MESSAGE_RC_OK) return rc ? rc : -1;
+  ft8_encode(msg.payload, tx_tones);
+  char text[FTX_MAX_MESSAGE_LENGTH]; ftx_message_offsets_t ofs;
+  if (ftx_message_decode(&msg, &hash_if, text, &ofs) == FTX_MESSAGE_RC_OK) { strncpy(tx_text, text, kTextLen - 1); tx_text[kTextLen - 1] = 0; }
+  return 0;
+}

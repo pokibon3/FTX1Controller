@@ -10,7 +10,7 @@ import { FtxMeter } from './ftxmeter.js';
 import { FilterDisplay } from './filterdisp.js';
 import { APP_VERSION } from './version.js';
 import { CwDecoder } from './cwdecoder.js';
-import { Ft8Decoder } from './ft8.js';
+import { Ft8Decoder, ft8Wave, SLOT } from './ft8.js';
 import { installDigitGlyphs } from './digits.js';
 import { EX_MENUS } from './exmenu.js';
 
@@ -32,7 +32,7 @@ const DEFAULTS = {
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'lr', layoutV2: true,
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
-  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, dec: true, decCh: 'L', decGain: 0, console: false,
+  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, dec: true, decCh: 'L', decGain: 0, console: false,
 };
 const cfg = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
@@ -698,6 +698,7 @@ async function setPtt(on) {
       toast(`PTT信号の設定に失敗: ${e.message}`, true);
     }
   }
+  if (!on) ui.ft8Halt?.(); // PTT released by anything else (TOT, button, window hidden) ends an FT8 transmission
   render();
 }
 
@@ -716,7 +717,8 @@ function setupPtt() {
   btn.addEventListener('pointerup', up);
   btn.addEventListener('pointercancel', up);
   // never leave the transmitter keyed when the window loses focus
-  window.addEventListener('blur', () => setPtt(false));
+  // (an FT8 transmission is timed and ends by itself, so it may go on in the background)
+  window.addEventListener('blur', () => { if (!ui.ft8Busy?.()) setPtt(false); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) setPtt(false); });
   window.addEventListener('pagehide', () => setPtt(false));
 }
@@ -1013,6 +1015,15 @@ async function startRxAudio({ quiet = false } = {}) {
     if (!quiet) toast(`RXオーディオ開始失敗: ${e.message}`, true);
   }
 }
+async function startTxAudio() {
+  try {
+    await audio.unlockLabels();
+    await refreshDevices();
+    await audio.startTx({ micId: $('#txIn').value, outputId: $('#txOut').value, gain: +cfg.txGain });
+    audio.setTxOpen(!cfg.txGate || ui.ptt);
+    return true;
+  } catch (e) { toast(`TXオーディオ開始失敗: ${e.message}`, true); return false; }
+}
 function setupAudio() {
   $('#rxVol').value = cfg.rxVol;
   $('#txGain').value = cfg.txGain;
@@ -1048,15 +1059,7 @@ function setupAudio() {
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   });
 
-  $('#btnTx').addEventListener('click', async () => {
-    try {
-      if (audio.tx) { await audio.stopTx(); return; }
-      await audio.unlockLabels();
-      await refreshDevices();
-      await audio.startTx({ micId: $('#txIn').value, outputId: $('#txOut').value, gain: +cfg.txGain });
-      audio.setTxOpen(!cfg.txGate || ui.ptt);
-    } catch (e) { toast(`TXオーディオ開始失敗: ${e.message}`, true); }
-  });
+  $('#btnTx').addEventListener('click', () => (audio.tx ? audio.stopTx() : startTxAudio()));
   $('#txGain').addEventListener('input', (e) => { cfg.txGain = +e.target.value; audio.setTxGain(cfg.txGain); save(); });
   $('#txGate').addEventListener('change', (e) => { cfg.txGate = e.target.checked; audio.setTxOpen(!cfg.txGate || ui.ptt); save(); });
   $('#txTone').addEventListener('change', (e) => audio.setTone(e.target.checked));
@@ -1284,29 +1287,41 @@ function setupVfoKeys() {
   }, 300);
 }
 
-// ---------------- FT8 receive (on RX audio) ----------------
+// ---------------- FT8 (receive on RX audio, transmit on TX audio) ----------------
 function setupFt8() {
   const ft8 = new Ft8Decoder();
   const list = $('#ft8List');
+  const strip = (c) => (c || '').replace(/[<>]/g, '');
+  const isGrid = (x) => /^[A-R]{2}\d{2}$/.test(x) && x !== 'RR73';
+  const fmtRpt = (db) => { const v = clamp(Math.round(db), -30, 49); return `${v < 0 ? '-' : '+'}${String(Math.abs(v)).padStart(2, '0')}`; };
+  const utcOf = (slot) => new Date(slot * SLOT).toISOString().slice(11, 19).replace(/:/g, '');
+  const toMe = (text) => !!cfg.ft8My && strip(text.split(' ')[0]) === cfg.ft8My;
   let rows = [];
   const draw = () => {
-    const shown = cfg.ft8Cq ? rows.filter((r) => /^CQ\b/.test(r.text)) : rows;
+    const shown = cfg.ft8Cq ? rows.filter((r) => r.tx || /^CQ\b/.test(r.text) || toMe(r.text)) : rows;
     list.innerHTML = '';
     let lastUtc = null;
     for (const r of shown) {
       const el = document.createElement('div');
-      el.className = `ft8-row${/^CQ\b/.test(r.text) ? ' cq' : ''}${r.utc !== lastUtc ? ' first' : ''}`;
+      el.className = `ft8-row${r.tx ? ' tx' : toMe(r.text) ? ' me' : /^CQ\b/.test(r.text) ? ' cq' : ''}${r.utc !== lastUtc ? ' first' : ''}`;
       lastUtc = r.utc;
-      for (const t of [r.utc, r.snr > 0 ? `+${r.snr}` : r.snr, r.dt.toFixed(1), r.freq, r.text]) {
+      const cells = r.tx ? [r.utc, 'TX', '', r.freq, r.text] : [r.utc, r.snr > 0 ? `+${r.snr}` : r.snr, r.dt.toFixed(1), r.freq, r.text];
+      for (const t of cells) {
         const c = document.createElement('span'); c.textContent = t; el.appendChild(c);
+      }
+      if (!r.tx) {
+        // click: answer this station (DX call, report, the other period); double-click also turns TX on
+        el.addEventListener('click', () => pick(r));
+        el.addEventListener('dblclick', () => { pick(r); tx.on = true; drawTx(); });
       }
       list.appendChild(el);
     }
   };
+  const addRows = (more) => { rows = [...more, ...rows].sort((a, b) => b.slot - a.slot).slice(0, 300); draw(); }; // newest slot on top
   ft8.addEventListener('decoded', (e) => {
-    rows = [...e.detail.rows, ...rows].slice(0, 300); // newest slot on top
     $('#ft8Info').textContent = `${e.detail.utc} · ${e.detail.rows.length} 件`;
-    draw();
+    addRows(e.detail.rows);
+    autoSeq(e.detail);
   });
   let pending = null;
   const sync = async () => {
@@ -1331,6 +1346,180 @@ function setupFt8() {
   $('#ft8Cq').addEventListener('change', (e) => { cfg.ft8Cq = e.target.checked; save(); draw(); });
   setInterval(() => { $('#ft8Bar').style.width = `${(ft8.secInSlot / 15) * 100}%`; }, 200);
   sync();
+
+  // ---- transmit ----
+  // Tx1-Tx6 as in WSJT-X: 1 call with grid, 2 report, 3 R+report, 4 RR73, 5 73, 6 CQ.
+  // The period is the slot parity: 0 = :00/:30, 1 = :15/:45. A transmission keys PTT at the slot start and plays the
+  // GFSK audio from 0.5 s (WSJT-X's DT = 0); PTT drops when the audio has played (12.64 s).
+  const tx = { dx: '', rpt: '-10', sel: 5, msgs: [], on: false, cur: null, lastSlot: -1, lastText: '', repeat: 0 };
+  const WATCHDOG = 10; // the same message this many times in a row turns TX off (as WSJT-X's Tx watchdog)
+  const msgEls = $$('#ft8Msgs input[type=text]'), selEls = $$('#ft8Msgs input[type=radio]');
+  const gen = () => {
+    const my = cfg.ft8My, dx = tx.dx, g = cfg.ft8Grid.slice(0, 4), r = tx.rpt;
+    tx.msgs = [`${dx} ${my} ${g}`, `${dx} ${my} ${r}`, `${dx} ${my} R${r}`, `${dx} ${my} RR73`, `${dx} ${my} 73`, `CQ ${my} ${g}`]
+      .map((m) => m.replace(/\s+/g, ' ').trim());
+    msgEls.forEach((el, i) => { el.value = tx.msgs[i]; });
+  };
+  const drawTx = () => {
+    selEls.forEach((el, i) => { el.checked = tx.sel === i; });
+    msgEls.forEach((el, i) => el.parentElement.classList.toggle('sending', tx.cur?.sel === i));
+    $('#ft8Dx').value = tx.dx;
+    $('#ft8Rpt').value = tx.rpt;
+    $('#btnFt8Tx').classList.toggle('on', tx.on);
+    $('#btnFt8Per').textContent = cfg.ft8Per ? '15/45' : '00/30';
+    $('#ft8TxTag').hidden = !tx.cur;
+  };
+  // the station a decoded message comes from (for CQ: the call before the grid), and its grid
+  const sender = (text) => {
+    const t = text.split(' ');
+    if (t[0] === 'CQ') { const g = isGrid(t[t.length - 1]); return { call: strip(t[t.length - (g ? 2 : 1)]), grid: g }; }
+    return { call: strip(t[1]), grid: isGrid(t[2] || '') };
+  };
+  // which Tx answers a message addressed to us: -1 = QSO over, null = not for us / not from our DX
+  const answer = (text) => {
+    const t = text.split(' ');
+    if (strip(t[0]) !== cfg.ft8My || !t[1]) return null;
+    const x = t[2] || '';
+    // another station: only a fresh call (grid or report) while we call CQ
+    if (strip(t[1]) !== tx.dx && (tx.sel !== 5 || !(x === '' || isGrid(x) || /^[+-]\d\d$/.test(x)))) return null;
+    if (x === 'RR73' || x === 'RRR') return 4;
+    if (x === '73') return -1;
+    if (/^R[+-]\d\d$/.test(x)) return 3;
+    if (/^[+-]\d\d$/.test(x)) return 2;
+    return 1;
+  };
+  const respond = (r) => {
+    const n = answer(r.text);
+    if (n === null) return false;
+    if (strip(r.text.split(' ')[1]) !== tx.dx) { tx.dx = strip(r.text.split(' ')[1]); tx.rpt = fmtRpt(r.snr); gen(); }
+    if (n < 0) { tx.on = false; toast(`${tx.dx} との QSO 終了`); } else tx.sel = n;
+    return true;
+  };
+  const pick = (r) => {
+    const { call } = sender(r.text);
+    if (!call || call === cfg.ft8My) return;
+    cfg.ft8Per = 1 - (r.slot % 2); save();
+    if (call !== tx.dx) { tx.dx = call; tx.rpt = fmtRpt(r.snr); }
+    gen();
+    if (!respond(r)) tx.sel = 0;
+    drawTx();
+  };
+  const autoSeq = ({ slot, rows: got }) => {
+    if (!cfg.ft8Auto || !tx.on || slot % 2 === cfg.ft8Per) return;
+    // a reply from our DX first, else (while calling CQ) the first station that answers
+    const mine = got.filter((r) => answer(r.text) !== null);
+    const r = mine.find((x) => strip(x.text.split(' ')[1]) === tx.dx) || mine[0];
+    if (!r) return;
+    const before = tx.msgs[tx.sel];
+    respond(r);
+    drawTx();
+    // decoding ends after our slot has begun: switch the message if the transmission is still young (WSJT-X does too)
+    if (tx.cur && tx.on && tx.msgs[tx.sel] !== before && Date.now() % SLOT < 2500) restart();
+  };
+
+  const problem = () => {
+    if (!radio.connected) return 'CATが接続されていません';
+    if (!/^[A-Z0-9/]{3,11}$/.test(cfg.ft8My)) return 'FT8: MY CALL を入力してください';
+    if (s.mode[s.ft] !== 'C') return 'FT8 送信は DATA-U で行ってください';
+    return null;
+  };
+  const play = (cur, tones) => {
+    const ctx = audio.tx.ctx;
+    const at = Math.max(cur.slot * SLOT + 500, Date.now() + 50);
+    const when = ctx.currentTime + (at - Date.now()) / 1000 - (ctx.outputLatency || ctx.baseLatency || 0);
+    const p = audio.playWave(ft8Wave(tones, +cfg.ft8TxHz, ctx.sampleRate, +cfg.ft8Lvl), when);
+    cur.play = p;
+    p.done.then(() => { if (cur.play === p) setTimeout(() => end(cur), 100); });
+  };
+  const encode = async (msg) => {
+    const enc = await ft8.encode(msg);
+    if (enc.rc) { tx.on = false; toast(`FT8: 送信できないメッセージです: ${msg}`, true); drawTx(); return null; }
+    return enc;
+  };
+  const echo = (cur) => {
+    rows = rows.filter((r) => !(r.tx && r.slot === cur.slot));
+    addRows([{ tx: true, slot: cur.slot, utc: utcOf(cur.slot), freq: +cfg.ft8TxHz, text: cur.text }]);
+  };
+  async function begin(slot) {
+    const err = problem();
+    if (err) { tx.on = false; toast(err, true); drawTx(); return; }
+    if (!audio.tx && !(await startTxAudio())) { tx.on = false; drawTx(); return; }
+    const sel = tx.sel, enc = await encode(tx.msgs[sel]);
+    if (!enc || !tx.on || Math.floor(Date.now() / SLOT) !== slot) return;
+    const cur = { slot, sel, text: enc.text, play: null };
+    tx.cur = cur;
+    ft8.txSlot = slot;
+    // safety: never past the slot, whatever happens to the audio
+    cur.timer = setTimeout(() => end(cur), slot * SLOT + 14000 - Date.now());
+    await setPtt(true);
+    if (!ui.ptt) { end(cur); return; }
+    try { play(cur, enc.tones); } catch (e) { tx.on = false; end(cur, true); toast(`FT8 送信失敗: ${e.message}`, true); return; }
+    echo(cur);
+    drawTx();
+  }
+  async function restart() {
+    const cur = tx.cur, sel = tx.sel, enc = await encode(tx.msgs[sel]);
+    if (!enc || tx.cur !== cur) return;
+    cur.play?.stop();
+    Object.assign(cur, { sel, text: enc.text });
+    try { play(cur, enc.tones); } catch (e) { tx.on = false; end(cur, true); toast(`FT8 送信失敗: ${e.message}`, true); return; }
+    echo(cur);
+    drawTx();
+  }
+  function end(cur = tx.cur, halt = false) {
+    if (!cur || tx.cur !== cur) return;
+    tx.cur = null;
+    clearTimeout(cur.timer);
+    const p = cur.play; cur.play = null; p?.stop();
+    setPtt(false);
+    if (!halt) {
+      tx.repeat = cur.text === tx.lastText ? tx.repeat + 1 : 1;
+      tx.lastText = cur.text;
+      if (cfg.ft8Auto && cur.sel === 4) tx.on = false; // 73 sent: done
+      if (tx.repeat >= WATCHDOG && tx.on) { tx.on = false; tx.repeat = 0; toast(`FT8: 同じメッセージを ${WATCHDOG} 回送信したので TX を止めました`, true); }
+    }
+    drawTx();
+  }
+  ui.ft8Busy = () => !!tx.cur;
+  // PTT dropped from outside (PTT key, TOT, window hidden): stop, and do not start again by itself
+  ui.ft8Halt = () => { if (tx.cur) { tx.on = false; end(tx.cur, true); } };
+  // timers are throttled in a hidden window, so the slot timing could not be kept
+  document.addEventListener('visibilitychange', () => { if (document.hidden && tx.on) { tx.on = false; drawTx(); } });
+  setInterval(() => {
+    const now = Date.now(), slot = Math.floor(now / SLOT);
+    if (!tx.on || tx.cur || tx.lastSlot === slot || slot % 2 !== cfg.ft8Per || now % SLOT > 2000) return;
+    tx.lastSlot = slot;
+    begin(slot);
+  }, 100);
+
+  const bindTxt = (id, key, re) => {
+    const el = $(`#${id}`);
+    el.value = cfg[key];
+    el.addEventListener('input', () => { cfg[key] = el.value.toUpperCase().replace(re, ''); save(); gen(); });
+    el.addEventListener('change', () => { el.value = cfg[key]; });
+  };
+  bindTxt('ft8My', 'ft8My', /[^A-Z0-9/]/g);
+  bindTxt('ft8Grid', 'ft8Grid', /[^A-Z0-9]/g);
+  $('#ft8Dx').addEventListener('input', (e) => { tx.dx = e.target.value.toUpperCase().replace(/[^A-Z0-9/]/g, ''); gen(); });
+  $('#ft8Rpt').addEventListener('input', (e) => { tx.rpt = e.target.value.trim(); gen(); });
+  $('#ft8Dx').addEventListener('change', drawTx);
+  $('#ft8TxHz').value = cfg.ft8TxHz;
+  $('#ft8TxHz').addEventListener('change', (e) => { cfg.ft8TxHz = clamp(Math.round(+e.target.value || 1500), 200, 3000); e.target.value = cfg.ft8TxHz; save(); });
+  $('#ft8Lvl').value = cfg.ft8Lvl;
+  $('#ft8Lvl').addEventListener('input', (e) => { cfg.ft8Lvl = +e.target.value; save(); });
+  $('#ft8Auto').checked = cfg.ft8Auto;
+  $('#ft8Auto').addEventListener('change', (e) => { cfg.ft8Auto = e.target.checked; save(); });
+  msgEls.forEach((el, i) => el.addEventListener('input', () => { tx.msgs[i] = el.value.toUpperCase(); }));
+  selEls.forEach((el, i) => el.addEventListener('change', () => { tx.sel = i; drawTx(); }));
+  $('#btnFt8Tx').addEventListener('click', () => {
+    tx.on = !tx.on;
+    if (tx.on) { const err = problem(); if (err) { tx.on = false; toast(err, true); } else tx.repeat = 0; }
+    drawTx();
+  });
+  $('#btnFt8Halt').addEventListener('click', () => { tx.on = false; end(tx.cur, true); drawTx(); });
+  $('#btnFt8Per').addEventListener('click', () => { cfg.ft8Per = 1 - cfg.ft8Per; save(); drawTx(); });
+  gen();
+  drawTx();
 }
 
 // ---------------- right sidebar (USB AUDIO / SETUP) ----------------

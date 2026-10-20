@@ -23,5 +23,11 @@ onmessage = async ({ data: m }) => {
       out.push({ snr: dv.getFloat32(0, true), dt: dv.getFloat32(4, true), freq: dv.getFloat32(8, true), text: new TextDecoder().decode(tb.subarray(0, tb.indexOf(0))) });
     }
     postMessage({ type: 'decoded', slot: m.slot, blocks, list: out });
+  } else if (m.type === 'encode') {
+    // message text -> 79 tones; text comes back as the receiver will see it (or rc != 0 when it cannot be packed)
+    const tb = new Uint8Array(e.memory.buffer, e.ft8_tx_text_ptr(), 40);
+    tb.fill(0); tb.set(new TextEncoder().encode(m.text.toUpperCase().trim().replace(/\s+/g, ' ')).subarray(0, 39));
+    const rc = e.ft8_tx_encode();
+    postMessage({ type: 'encoded', id: m.id, rc, text: new TextDecoder().decode(tb.subarray(0, tb.indexOf(0))), tones: rc ? null : new Uint8Array(e.memory.buffer, e.ft8_tx_tones_ptr(), 79).slice() });
   }
 };
