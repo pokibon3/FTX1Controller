@@ -1111,7 +1111,6 @@ function setupDecoder() {
 
 // ---------------- right sidebar (USB AUDIO / SETUP) ----------------
 function setupSidebar() {
-  $('#appVer').textContent = `v${APP_VERSION}`;
   $('#sbVer').textContent = `v${APP_VERSION}`;
   // the last rejected command, shown next to the error count
   // every rejection since connecting, shown together (the newest one used to overwrite the earlier ones)
