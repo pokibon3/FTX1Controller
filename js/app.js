@@ -1261,23 +1261,21 @@ setupSidebar();
 setupDecoder();
 render();
 
-// PWA install button: always shown unless running as the installed app. Chrome only hands the page an install
-// prompt now and then (not after it was dismissed, not when already installed), so without one the button explains
-// where Chrome's own install menu is.
-let installEvt = null;
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-$('#btnInstall').hidden = standalone();
+// SETUP: install (in the browser) / uninstall (in the installed app). A page cannot uninstall itself, so the
+// installed app's button explains Chrome's own menu.
+let installEvt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
-window.addEventListener('appinstalled', () => { installEvt = null; $('#btnInstall').hidden = true; toast('アプリとしてインストールしました'); });
-$('#btnInstall').addEventListener('click', async () => {
-  if (installEvt) {
-    installEvt.prompt();
-    await installEvt.userChoice.catch(() => {});
-    installEvt = null;
-    return;
-  }
-  toast('Chrome のメニュー（右上の ⋮）→「キャスト、保存、共有」→「ページをアプリとしてインストール」から入れてください。インストール済みの場合は chrome://apps から起動できます', false, 9000);
-});
+{
+  const inApp = standalone();
+  $('#btnAppInst').textContent = inApp ? 'アンインストール' : 'インストール';
+  $('#appInstHint').textContent = inApp ? 'アプリとして起動中' : 'ブラウザで表示中';
+  $('#btnAppInst').addEventListener('click', async () => {
+    if (inApp) { toast('ウインドウ右上の ⋮ →「FTX-1 Controller をアンインストール」を選んでください', false, 8000); return; }
+    if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; return; }
+    toast('Chrome のメニュー（右上の ⋮）→「キャスト、保存、共有」→「ページをアプリとしてインストール」から入れてください', false, 8000);
+  });
+}
 // Installed app: Chrome opens the first window at a default size that does not fit the panel. Size it to the
 // content once (later launches keep whatever size the user leaves it at).
 if (standalone()) {
