@@ -98,6 +98,8 @@ const PARAMS = {
   proc: { name: 'PROC LEVEL', get: () => s.proc, set: (v) => radio.setProc(v), min: 0, max: 100, step: 1, fmt: (v) => (v ? String(v) : 'OFF') },
   amc: { name: 'AMC LEVEL', get: () => s.amc, set: (v) => radio.setAmc(v), min: 1, max: 100, step: 1, fmt: String },
   voxDelay: { name: 'VOX DELAY', get: () => s.voxDelay, set: (v) => radio.setVoxDelay(v), min: 0, max: 33, step: 1, fmt: (v) => `${delayMs(v)}ms` },
+  tone: { name: () => `TONE FREQ ${side()}`, get: () => s.tone[V()], set: (v) => radio.setTone(V(), v), min: 0, max: 49, step: 1, fmt: (v) => `${CTCSS[v].toFixed(1)}Hz` },
+  dcs: { name: () => `DCS ${side()}`, get: () => s.dcs[V()], set: (v) => radio.setDcs(V(), v), min: 0, max: 103, step: 1, fmt: (v) => DCS[v] },
   bkDelay: { name: 'BK-DELAY', get: () => s.bkDelay, set: (v) => radio.setBkDelay(v), min: 0, max: 33, step: 1, fmt: (v) => `${delayMs(v)}ms` },
   clar: {
     name: () => `CLAR ${side()}`, get: () => s.clarOfs[V()], min: -9999, max: 9999, step: 10, fmt: (v) => signed(v, 'Hz'),
@@ -212,41 +214,43 @@ const setScopeMode = (type, dmode) => radio.setScope(6, SC_MODE_CODE[type][dmode
 const SC_SPAN = { 2: '5k', 3: '10k', 4: '20k', 5: '50k', 6: '100k', 7: '200k', 8: '500k', 9: '1M' };
 const SC_SPEED = ['SLOW1', 'SLOW2', 'FAST1', 'FAST2', 'FAST3', 'STOP'];
 
+const RPT = ['SIMPLEX', '+', '−', 'ARS'];
+const SQL_TYPE = ['OFF', 'ENC', 'TSQ', 'DCS', 'PR FREQ', 'REV TONE'];
+const FM_STEP = ['5k', '6.25k', '10k', '12.5k', '20k', '25k'];
+const CTCSS = [67.0, 69.3, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5, 94.8, 97.4, 100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3, 131.8, 136.5, 141.3, 146.2, 151.4, 156.7, 159.8, 162.2, 165.5, 167.9, 171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5, 203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1];
+const DCS = ['023', '025', '026', '031', '032', '036', '043', '047', '051', '053', '054', '065', '071', '072', '073', '074', '114', '115', '116', '122', '125', '131', '132', '134', '143', '145', '152', '155', '156', '162', '165', '172', '174', '205', '212', '223', '225', '226', '243', '244', '245', '246', '251', '252', '255', '261', '263', '265', '266', '271', '274', '306', '311', '315', '325', '331', '332', '343', '346', '351', '356', '364', '365', '371', '411', '412', '413', '423', '431', '432', '445', '446', '452', '454', '455', '462', '464', '465', '466', '503', '506', '516', '523', '526', '532', '546', '565', '606', '612', '624', '627', '631', '632', '654', '662', '664', '703', '712', '723', '731', '732', '734', '743', '754'];
+
 const SCREENS = {
-  // [FUNC] knob press: function menu in the manual's order (SSB page, then CW page).
-  // Items the CAT protocol cannot reach are left out; VFO items at the end are this app's additions.
-  FUNCTION: {
-    items: () => [
-      { section: 'SSB' },
+  // [FUNC] knob press: the radio's three function pages (operation manual p.25). Items with no CAT command are shown
+  // disabled ("—"), so the pages keep the radio's layout; the VFO items at the end of page 1 are this app's.
+  'FUNCTION 1/3': { title: 'FUNCTION', items: () => [
+      { label: 'PAGE 1/3', value: () => 'SSB', act: () => openPop('FUNCTION 2/3') },
       { label: 'D-LEVEL', func: 'dlevel' },
       { label: 'D-PEAK', func: 'dpeak' },
+      { label: 'D-MARKER', value: () => onOff(s.scope[2] === '1'), on: () => s.scope[2] === '1', act: () => radio.setScope(2, s.scope[2] === '1' ? 0 : 1) },
       { label: 'D-COLOR', func: 'dcolor' },
-      { label: 'CONTRAST', func: 'contrast' },
+      { label: 'D-CONTRAST', func: 'contrast' },
       { label: 'DIMMER', func: 'dimmer' },
+      { label: 'MOX', value: () => onOff(s.mox), on: () => s.mox, act: () => radio.setMox(!s.mox) },
       { label: 'ATT', value: () => onOff(s.att), on: () => s.att, act: () => radio.setAtt(!s.att) },
       { label: () => (bandType(s.freq[V()]) ? 'AMP' : 'IPO'), value: () => preampText(), on: () => preampVal() > 0, act: () => cyclePreamp() },
       { label: 'DNF', value: () => onOff(s.bc[V()]), on: () => s.bc[V()], act: () => radio.setBeatCancel(V(), !s.bc[V()]) },
       { label: 'AGC', value: () => AGC[s.agc[V()]], act: () => radio.setAGC(V(), (s.agc[V()] + 1) % 5) },
+      { label: 'MIC EQ', value: () => onOff(s.micEq), on: () => s.micEq, act: () => radio.setMicEq(!s.micEq) },
+      { label: 'PROC LEVEL', func: 'proc', on: () => s.procOn, act: () => radio.setProcOn(!s.procOn) },
       { label: 'ANT TUNE', value: () => 'START', act: () => radio.tune() },
       { label: 'TUNER', value: () => onOff(s.tuner), on: () => s.tuner, act: () => radio.setTuner(!s.tuner) },
       { label: 'NB', func: 'nb', on: () => s.nb[V()] > 0, act: () => radio.setNB(V(), s.nb[V()] ? 0 : (ui.lastNb || 5)) },
       { label: 'DNR', func: 'nr', on: () => s.nr[V()] > 0, act: () => radio.setNR(V(), s.nr[V()] ? 0 : (ui.lastNr || 5)) },
-      { label: 'PROC LEVEL', func: 'proc' },
+      { label: 'ANT', value: () => (s.ex['030704'] === '1' ? 'ANT2' : 'ANT1'), act: () => radio.setEx('030704', s.ex['030704'] === '1' ? 0 : 1) },
+      { label: 'TXW', value: () => onOff(s.txw), on: () => s.txw, act: () => radio.setTxw(!s.txw) },
       { label: 'RF POWER', func: 'power' },
       { label: 'MIC GAIN', func: 'mic' },
       { label: 'AMC LEVEL', func: 'amc' },
       { label: 'VOX', value: () => onOff(s.vox), on: () => s.vox, act: () => radio.setVox(!s.vox) },
       { label: 'VOX GAIN', func: 'voxGain' },
       { label: 'VOX DELAY', func: 'voxDelay' },
-      { section: 'CW' },
-      { label: 'MONI LEVEL', func: 'moni', on: () => s.moniOn, act: () => radio.setMonitorOn(!s.moniOn) },
-      { label: 'BK-IN', value: () => onOff(s.bkin), on: () => s.bkin, act: () => radio.setBreakIn(!s.bkin) },
-      { label: 'CW SPEED', func: 'ks' },
-      { label: 'CW PITCH', func: 'kp' },
-      { label: 'BK-DELAY', func: 'bkDelay' },
-      { label: 'ZIN', value: () => 'ZERO IN', act: () => radio.zeroIn(V()) },
-      { label: 'CW SPOT', value: () => onOff(s.spot), on: () => s.spot, act: () => radio.setSpot(!s.spot) },
-      { section: 'VFO' },
+      { section: 'VFO（アプリ）' },
       { label: 'MAIN⇔SUB', value: () => 'VS', act: () => radio.selectVFO(1 - s.vs) },
       { label: 'A⇄B', value: () => 'SWAP', act: () => radio.swap() },
       { label: 'A▸B', value: () => 'COPY', act: () => radio.copyAtoB() },
@@ -257,8 +261,45 @@ const SCREENS = {
       { label: 'DIAL STEP', value: () => (cfg.step === 'auto' ? 'AUTO' : stepText(cfg.step)), act: () => ACTIONS.step() },
       { label: 'RF GAIN', func: 'rf' },
       { label: 'SQL', func: 'sql' },
-    ],
-  },
+    ] },
+  'FUNCTION 2/3': { title: 'FUNCTION', items: () => [
+      { label: 'PAGE 2/3', value: () => 'CW', act: () => openPop('FUNCTION 3/3') },
+      { label: 'MONI LEVEL', func: 'moni', on: () => s.moniOn, act: () => radio.setMonitorOn(!s.moniOn) },
+      { label: 'KEYER', value: () => onOff(s.keyer), on: () => s.keyer, act: () => radio.setKeyer(!s.keyer) },
+      { label: 'BK-IN', value: () => onOff(s.bkin), on: () => s.bkin, act: () => radio.setBreakIn(!s.bkin) },
+      { label: 'CW SPEED', func: 'ks' },
+      { label: 'CW PITCH', func: 'kp' },
+      { label: 'BK-DELAY', func: 'bkDelay' },
+      { label: 'ZIN', value: () => 'ZERO IN', act: () => radio.zeroIn(V()) },
+      { label: 'CW SPOT', value: () => onOff(s.spot), on: () => s.spot, act: () => radio.setSpot(!s.spot) },
+      { label: 'MESSAGE', value: () => 'M1-M5', act: () => openPop('MESSAGE') },
+      { label: 'PLAY', value: () => 'CH1-5', act: () => openPop('PLAY') },
+      { label: 'RECORD', value: () => 'CH1-5', act: () => openPop('RECORD') },
+    ] },
+  'FUNCTION 3/3': { title: 'FUNCTION', items: () => [
+      { label: 'PAGE 3/3', value: () => 'FM/C4FM', act: () => openPop('FUNCTION 1/3') },
+      { label: 'DTMF', na: true },
+      { label: 'T-CALL', na: true },
+      { label: 'RPT SHIFT', value: () => RPT[s.os[V()]], act: () => radio.setRptShift(V(), (s.os[V()] + 1) % 4) },
+      { label: 'REV', na: true },
+      { label: 'DG-ID TX', na: true },
+      { label: 'DG-ID RX', na: true },
+      { label: 'APRS S.LIST', na: true },
+      { label: 'APRS M.LIST', na: true },
+      { label: 'APRS BEACON', na: true },
+      { label: 'APRS BCN-TX', na: true },
+      { label: 'CH STEP', value: () => FM_STEP[+s.ex['030606'] || 0], act: () => radio.setEx('030606', ((+s.ex['030606'] || 0) + 1) % 6) },
+      { label: 'SQL TYPE', value: () => SQL_TYPE[s.ct[V()]], act: () => radio.setSqlType(V(), (s.ct[V()] + 1) % 6) },
+      { label: 'TONE FREQ', func: 'tone' },
+      { label: 'DCS', func: 'dcs' },
+      { label: 'HOME', na: true },
+    ] },
+  MESSAGE: { items: () => [1, 2, 3, 4, 5].map((n) => ({ label: `M${n}`, value: () => 'PLAY', act: () => radio.playMessage(n) }))
+    .concat([{ label: 'STOP', act: () => radio.playMessage(0) }]) },
+  PLAY: { items: () => [1, 2, 3, 4, 5].map((n) => ({ label: `CH${n}`, value: () => 'PLAY', act: () => radio.playVoice(n) }))
+    .concat([{ label: 'STOP', act: () => radio.playVoice(0) }]) },
+  RECORD: { items: () => [1, 2, 3, 4, 5].map((n) => ({ label: `CH${n}`, value: () => 'SELECT', act: () => radio.recordVoice(n) }))
+    .concat([{ label: 'REC', value: () => 'START/STOP', act: () => radio.recordVoice(0) }]) },
   SPAN: {
     items: () => Object.entries(SC_SPAN).map(([c, t]) => ({ label: t, cur: () => s.scope[5] === c, act: () => radio.setScope(5, c), close: true })),
   },
@@ -299,7 +340,8 @@ function openPop(name, target = null) {
   if (ui.pop === name && target === ui.target) { closePop(); return; }
   ui.pop = name;
   ui.target = target;
-  $('#popTitle').textContent = target == null ? name : `${name}  ${side(target)}`;
+  const title = SCREENS[name].title || name;
+  $('#popTitle').textContent = target == null ? title : `${title}  ${side(target)}`;
   const grid = $('#popGrid');
   grid.innerHTML = '';
   popItems = SCREENS[name].items().map((it) => {
@@ -313,7 +355,9 @@ function openPop(name, target = null) {
     const el = document.createElement('button');
     el.className = 'pt';
     el.innerHTML = '<b></b><span></span>';
+    if (it.na) { el.classList.add('na'); el.title = 'CAT では操作できません'; }
     el.addEventListener('click', () => {
+      if (it.na) { toast(`${val(it.label)} は CAT では操作できません`); return; }
       it.act?.();
       if (it.func) assignFunc(it.func);
       if (it.close) setTimeout(closePop, 350);
@@ -334,7 +378,7 @@ function closePop() {
 function updatePop() {
   for (const { it, el, b, span } of popItems) {
     b.textContent = val(it.label);
-    span.textContent = it.func ? paramText(it.func) : (it.value ? it.value() : '');
+    span.textContent = it.na ? '—' : it.func ? paramText(it.func) : (it.value ? it.value() : '');
     el.classList.toggle('on', !!it.on?.());
     el.classList.toggle('cur', !!it.cur?.());
     el.classList.toggle('func', it.func === cfg.func);
@@ -575,7 +619,7 @@ function setupKnobs() {
       if (radio.connected && ui.funcRadioOnly) { popup(SF_NAME[s.sf], '本体で操作', 0); func.showFree(); return; }
       adjust(cfg.func, n); func.showFree();
     },
-    onPress: () => openPop('FUNCTION'),
+    onPress: () => openPop('FUNCTION 1/3'),
   });
 
   const sub = new Knob($('#knSubDial'), {
@@ -1313,7 +1357,9 @@ if (standalone()) {
     window.resizeTo(w, Math.min(screen.availHeight, window.outerHeight));
     // wait for the relayout at the new width, then take the height the page needs
     setTimeout(() => {
-      const h = Math.min(screen.availHeight, document.documentElement.scrollHeight + chromeH);
+      // body has min-height: 100vh, so scrollHeight is never smaller than the window: measure the content instead
+      const bottom = $('#app').getBoundingClientRect().bottom + window.scrollY;
+      const h = Math.min(screen.availHeight, Math.ceil(bottom + 12 + $('#statusbar').offsetHeight + chromeH));
       window.resizeTo(w, h);
       window.moveTo(Math.max(0, (screen.availWidth - w) / 2), Math.max(0, (screen.availHeight - h) / 2));
     }, 150);

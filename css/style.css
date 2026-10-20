@@ -411,12 +411,13 @@ button { font: inherit; color: inherit; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .2cqi; padding: 0;
   border: .25cqi solid #8e939a; border-radius: .6cqi; background: linear-gradient(180deg, #1c1e21, #050506); color: #fff; cursor: pointer;
 }
-.pt b { font-size: 2.5cqi; font-weight: 800; letter-spacing: .1cqi; white-space: nowrap; }
+.pt b { font-size: 2.2cqi; font-weight: 800; letter-spacing: 0; white-space: nowrap; max-width: 100%; overflow: hidden; }
 .pt span { font-size: 1.9cqi; color: #c9ced6; font-weight: 700; white-space: nowrap; }
 .pt.on { border-color: #fff; background: linear-gradient(180deg, #3a3e44, #1c1e21); }
 .pt.on span { color: var(--accent); }
 .pt.cur { background: linear-gradient(180deg, #f4f6f8, #b9bec5); color: #000; border-color: #fff; }
 .pt.cur span { color: #222; }
+.pt.na { opacity: .35; cursor: default; }
 .pt.func { border-color: var(--accent); box-shadow: inset 0 0 0 .2cqi var(--accent); }
 
 /* FUNC value popup */

@@ -121,7 +121,10 @@ function initialState() {
     vm: [{ t: 0, ch: '' }, { t: 0, ch: '' }], // IF/OI P7 (0 VFO 1 memory 2 memory tune 3 QMB 5 PMS) and P1
     ri: null,         // RI: { hiswr, tuning, busy } (MAIN side)
     // radio's own spectrum scope (SS P2 -> P3): 0 SPEED, 5 SPAN, 6 MODE
-    scope: { 0: '2', 1: '0', 3: '0', 4: 0, 5: '6', 6: '0' }, // 1 PEAK, 3 COLOR, 4 LEVEL (dB)
+    scope: { 0: '2', 1: '0', 2: '0', 3: '0', 4: 0, 5: '6', 6: '0' }, // 1 PEAK, 2 MARKER, 3 COLOR, 4 LEVEL (dB)
+    mox: false, txw: false, keyer: false, procOn: false, micEq: false, // MX / TS / KR / PR0 / PR1
+    os: [0, 0], ct: [0, 0], tone: [8, 8], dcs: [0, 0],                // OS / CT / CN (per side)
+    ex: {},                                                            // EX menu values by P1P2P3
     dim: [10, 10, 10], // DA: contrast / dimmer / LED (00-20)
     proc: 50, amc: 50, voxDelay: 6, bkDelay: 6, // PL / AO / VD / SD
     clarRx: [false, false], clarTx: [false, false], clarOfs: [0, 0],
@@ -270,7 +273,9 @@ export class FTX1 extends EventTarget {
       'AG0;', 'AG1;', 'RG0;', 'RG1;', 'SQ0;', 'SQ1;', 'PC;', 'MG;', 'KS;', 'KP;', 'BI;', 'VX;', 'VG;', 'ML1;',
       'NL0;', 'NL1;', 'RL0;', 'RL1;', 'NA0;', 'NA1;', 'BC0;', 'BC1;', 'BP00;', 'BP01;', 'CO00;', 'CO01;', 'CO02;', 'CO03;',
       'RA0;', 'PA0;', 'PA1;', 'PA2;', 'GT0;', 'GT1;', 'IS0;', 'IS1;', 'SH0;', 'SH1;', 'LK;', 'AC;', 'CS;', 'SS00;', 'SS05;', 'SS06;', 'SF0;', 'FN;', 'MS;', 'ML0;', 'IF;', 'OI;', 'RI0;',
-      'SS01;', 'SS03;', 'SS04;', 'DA;', 'PL;', 'AO;', 'VD;', 'SD;',
+      'SS01;', 'SS02;', 'SS03;', 'SS04;', 'DA;', 'PL;', 'AO;', 'VD;', 'SD;',
+      'MX;', 'TS;', 'KR;', 'PR0;', 'PR1;', 'OS0;', 'OS1;', 'CT0;', 'CT1;', 'CN00;', 'CN10;', 'CN01;', 'CN11;',
+      'EX030704;', 'EX030606;',
       'CF000;', 'CF001;', 'CF100;', 'CF101;', 'AI;'].forEach((c) => this.send(c, { read: true }));
   }
 
@@ -426,6 +431,14 @@ export class FTX1 extends EventTarget {
         if (p[1] === '4') { const db = parseFloat(p.slice(2, 7)); if (Number.isFinite(db)) s.scope[4] = db; } // SS04+05.0
         else if (p[2]) s.scope[p[1]] = p[2];
         break;
+      case 'MX': if (ok('MX')) s.mox = p[0] === '1'; break;
+      case 'TS': if (ok('TS')) s.txw = p[0] === '1'; break;
+      case 'KR': if (ok('KR')) s.keyer = p[0] === '1'; break;
+      case 'PR': if (ok('PR' + p[0])) { if (p[0] === '0') s.procOn = p[1] === '2'; else s.micEq = p[1] === '2'; } break;
+      case 'OS': if (ok('OS' + v)) s.os[v] = +p[1] || 0; break;
+      case 'CT': if (ok('CT' + v)) s.ct[v] = +p[1] || 0; break;
+      case 'CN': if (ok('CN' + v + p[1])) { if (p[1] === '0') s.tone[v] = num(2, 5); else s.dcs[v] = num(2, 5); } break;
+      case 'EX': if (p.length > 6 && ok('EX' + p.slice(0, 6))) s.ex[p.slice(0, 6)] = p.slice(6); break;
       case 'DA': if (ok('DA') && p.length >= 8) s.dim = [num(2, 4), num(4, 6), num(6, 8)]; break;
       case 'PL': if (ok('PL')) s.proc = num(0, 3); break;
       case 'AO': if (ok('AO')) s.amc = num(0, 3); break;
@@ -517,6 +530,20 @@ export class FTX1 extends EventTarget {
   setSpot(on) { this._set('CS', `CS${on ? 1 : 0};`, () => { this.s.spot = on; }); }
   zeroIn(vfo) { this.send(`ZI${vfo};`); }
   // SS P1=0 P2 P3 P4-P7=0000 (P2: 0 SPEED, 5 SPAN, 6 MODE)
+  setMox(on) { this._set('MX', `MX${on ? 1 : 0};`, () => { this.s.mox = on; }); }
+  setTxw(on) { this._set('TS', `TS${on ? 1 : 0};`, () => { this.s.txw = on; }); }
+  setKeyer(on) { this._set('KR', `KR${on ? 1 : 0};`, () => { this.s.keyer = on; }); }
+  // PR P1 0: speech processor / 1: parametric mic EQ, P2 1: OFF / 2: ON
+  setProcOn(on) { this._set('PR0', `PR0${on ? 2 : 1};`, () => { this.s.procOn = on; }); }
+  setMicEq(on) { this._set('PR1', `PR1${on ? 2 : 1};`, () => { this.s.micEq = on; }); }
+  setRptShift(vfo, n) { this._set('OS' + vfo, `OS${vfo}${n};`, () => { this.s.os[vfo] = n; }); }
+  setSqlType(vfo, n) { this._set('CT' + vfo, `CT${vfo}${n};`, () => { this.s.ct[vfo] = n; }); }
+  setTone(vfo, n) { n = clamp(n, 0, 49); this._set(`CN${vfo}0`, `CN${vfo}0${pad(n, 3)};`, () => { this.s.tone[vfo] = n; }); }
+  setDcs(vfo, n) { n = clamp(n, 0, 103); this._set(`CN${vfo}1`, `CN${vfo}1${pad(n, 3)};`, () => { this.s.dcs[vfo] = n; }); }
+  setEx(key, val) { this._set('EX' + key, `EX${key}${val};`, () => { this.s.ex[key] = String(val); }); }
+  playMessage(n) { this.send(`KY1${n};`); }      // CW MESSAGE memory 1-5, 0 = stop
+  playVoice(n) { this.send(`PB0${n};`); }        // voice memory 1-5, 0 = play/stop
+  recordVoice(n) { this.send(`LM0${n};`); }      // 1-5 select channel, 0 = start/stop recording
   setScopeLevel(db) {
     db = clamp(Math.round(db * 2) / 2, -30, 30);
     const t = `${db < 0 ? '-' : '+'}${Math.abs(db).toFixed(1).padStart(4, '0')}`;
