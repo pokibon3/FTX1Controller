@@ -41,7 +41,7 @@ PTT は既定で CAT (`TX1;`)。RTS/DTR 方式にする場合は SETUP で方式
 | 周波数の桁 | 桁の上でホイール → その桁を増減。選択中VFOの周波数クリック → 直接入力 |
 | MAIN / SUB 表示 | クリックで操作VFO切替（`VS`）。モード表示クリックで MODE ページ |
 | LCD 下段キー | 実機のスコープ画面と同じ D-MODE（CENTER/CURSOR/FIX）/ 3DSS⇔W/F / MULTI / SCOPE / SPAN / SPEED。D-MODE・3DSS・SPAN・SPEED は本体スコープを CAT（`SS`）で操作、MULTI はアプリの AF-FFT 表示の ON/OFF |
-| FUNC ノブ押し | ファンクションメニュー（マニュアルの順: SSB / CW、末尾に VFO 操作）。数値項目はタップで **FUNC ノブ** に割当 |
+| FUNC ノブ押し | ファンクションメニュー（実機と同じ 3 ページ）。3/3 の SETTING キーで設定メニュー（`EX`、約 400 項目）を開ける |
 | フィルター表示タッチ | WIDTH / SHIFT / NARROW / CONTOUR / APF / NOTCH |
 | N/W・MAG 長押し | MODE / BAND 選択 |
 | 上部キー | 実機と同じ GM / S-DX / PMG / MAG / N/W と ◢SPLIT / V/M / M▸V。◢ は押す: MAIN⇔SUB 入替（`SV`）・長押し: SPLIT、V/M は押す: `VM`・長押し: メモリー書込（`AM`）、M▸V は押す: `MA`・長押し: メモリーチューン。GM / S-DX / PMG は CAT 非対応 |

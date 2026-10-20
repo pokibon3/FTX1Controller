@@ -626,3 +626,23 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .st-bar .si.blink { animation: blink 1s steps(2, start) infinite; }
 @keyframes blink { to { visibility: hidden; } }
 
+
+/* settings menus (EX) */
+.exm { position: absolute; inset: 0; z-index: 4; background: #0c0d10; display: flex; flex-direction: column; }
+.exm-title { height: 4cqi; display: flex; align-items: center; justify-content: center; font-size: 2.4cqi; font-weight: 800; letter-spacing: .3cqi; color: #fff; background: linear-gradient(180deg, #6a6f76, #3a3d42); }
+.exm-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 26cqi 1fr; }
+.exm-groups { overflow: auto; background: #15171a; border-right: .2cqi solid #2a2d31; }
+.exm-g { display: block; width: 100%; text-align: left; padding: 1cqi 1.4cqi; border: 0; border-bottom: .15cqi solid #23262a; background: none; color: #e6e8eb; font-size: 2.2cqi; font-weight: 700; cursor: pointer; }
+.exm-g.cur { background: linear-gradient(180deg, #4a7ec4, #2c5a99); color: #fff; }
+.exm-items { overflow: auto; }
+.exm-i { display: flex; align-items: center; gap: 1cqi; padding: .55cqi 1.2cqi; border-bottom: .15cqi solid #1d2024; cursor: pointer; }
+.exm-i .n { flex: 1; font-size: 2.1cqi; font-weight: 700; color: #e6e8eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.exm-i .v { min-width: 16cqi; max-width: 30cqi; padding: .3cqi 1cqi; border: .2cqi solid #8e939a; border-radius: .4cqi; background: #000; color: #f0c534; font-size: 2.1cqi; font-weight: 700; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.exm-i.sel { background: #23272d; }
+.exm-i.sel .v { border-color: #f0c534; }
+.exm-i.na .n, .exm-i.na .v { color: #6f757d; }
+.exm-foot { height: 5.6cqi; display: flex; align-items: center; gap: 2cqi; padding: 0 1cqi; background: #15171a; border-top: .2cqi solid #2a2d31; }
+.exm-back { height: 4.2cqi; padding: 0 3cqi; border: 0; border-radius: .5cqi; background: linear-gradient(180deg, #686c72, #3b3d41); color: #f0c534; font-size: 2.3cqi; font-weight: 800; cursor: pointer; }
+.exm-hint { font-size: 1.8cqi; color: #8d9198; }
+/* single-band screen has no TX/RX badge (manual p.18) */
+.lcd.lay-single .b-txrx { display: none; }

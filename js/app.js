@@ -11,6 +11,7 @@ import { FilterDisplay } from './filterdisp.js';
 import { APP_VERSION } from './version.js';
 import { CwDecoder } from './cwdecoder.js';
 import { installDigitGlyphs } from './digits.js';
+import { EX_MENUS } from './exmenu.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -294,12 +295,12 @@ const SCREENS = {
       { label: 'DCS', func: 'dcs' },
       { label: 'HOME', na: true },
       { label: 'BACK', nav: '←', act: () => openPop('FUNCTION 2/3') },
-      { label: 'RADIO', value: () => 'SETTING', setting: true, na: true },
-      { label: 'CW', value: () => 'SETTING', setting: true, na: true },
-      { label: 'OPERATION', value: () => 'SETTING', setting: true, na: true },
-      { label: 'DISPLAY', value: () => 'SETTING', setting: true, na: true },
-      { label: 'EXTENSION', value: () => 'SETTING', setting: true, na: true },
-      { label: 'APRS', value: () => 'SETTING', setting: true, na: true },
+      { label: 'RADIO', value: () => 'SETTING', setting: true, act: () => { closePop(); openSettings(0); } },
+      { label: 'CW', value: () => 'SETTING', setting: true, act: () => { closePop(); openSettings(1); } },
+      { label: 'OPERATION', value: () => 'SETTING', setting: true, act: () => { closePop(); openSettings(2); } },
+      { label: 'DISPLAY', value: () => 'SETTING', setting: true, act: () => { closePop(); openSettings(3); } },
+      { label: 'EXTENSION', value: () => 'SETTING', setting: true, act: () => { closePop(); openSettings(4); } },
+      { label: 'APRS', value: () => 'SETTING', setting: true, act: () => { closePop(); openSettings(5); } },
     ] },
   MESSAGE: { items: () => [1, 2, 3, 4, 5].map((n) => ({ label: `M${n}`, value: () => 'PLAY', act: () => radio.playMessage(n) }))
     .concat([{ label: 'STOP', act: () => radio.playMessage(0) }]) },
@@ -626,6 +627,7 @@ function setupKnobs() {
   const func = new Knob($('#knFunc'), {
     pxPerStep: 6,
     onTurn: (n) => {
+      if (!$('#exm').hidden && exSel) { exAdjust(n); func.showFree(); return; }
       // a radio-only function (D-LEVEL ...) has no CAT command to adjust; say so instead of turning something else
       if (radio.connected && ui.funcRadioOnly) { popup(SF_NAME[s.sf], '本体で操作', 0); func.showFree(); return; }
       adjust(cfg.func, n); func.showFree();
@@ -758,7 +760,7 @@ const ACTIONS = {
     cfg.layout = LAYOUTS[(LAYOUTS.indexOf(cfg.layout) + 1) % LAYOUTS.length];
     save();
   },
-  back: { press: () => { closePop(); $('#popup').hidden = true; }, hold: () => {} },
+  back: { press: () => { if (!$('#exm').hidden) { closeSettings(); return; } closePop(); $('#popup').hidden = true; }, hold: () => {} },
   // FINE / FAST follow the radio (FN) while connected
   fine: {
     press: () => { if (radio.connected) radio.setFine(s.fn === 1 ? 0 : 1); else { ui.fine = !ui.fine; ui.fast = false; } },
@@ -1164,6 +1166,94 @@ function setupDecoder() {
   $('#btnDec').classList.toggle('on', cfg.dec);
 }
 
+// ---------------- settings menus (EX) ----------------
+// Groups on the left, the selected group's items on the right (as the radio's setting screens). Values are read with
+// EX P1P2P3; when a group is opened; an item is changed with the FUNC knob, the mouse wheel or a click on its value.
+let exMenu = null, exGroup = null, exSel = null;
+function exText(it, raw) {
+  if (raw == null) return '…';
+  if (it.t === 'na') return '—';
+  if (it.t === 'text') return raw.trim() || '(空)';
+  const v = parseInt(raw, 10);
+  if (!Number.isFinite(v)) return raw;
+  if (it.t === 'opt') return (it.o.find((o) => o[0] === v) || [0, raw])[1];
+  const x = v / it.k;
+  return `${it.s && x > 0 ? '+' : ''}${it.k > 1 ? x.toFixed(1) : x}${it.u || ''}`;
+}
+function exEncode(it, v) {
+  if (it.t === 'opt') return pad(v, it.n);
+  if (it.s) return `${v < 0 ? '-' : '+'}${pad(Math.abs(v), it.n - 1)}`;
+  return pad(v, it.n);
+}
+const pad = (n, w) => String(Math.max(0, Math.round(n))).padStart(w, '0');
+function exStep(it, raw, n) {
+  const v = parseInt(raw, 10);
+  if (it.t === 'opt') {
+    const codes = it.o.map((o) => o[0]);
+    const i = Math.max(0, codes.indexOf(v));
+    return codes[clamp(i + n, 0, codes.length - 1)];
+  }
+  return clamp((Number.isFinite(v) ? v : it.lo) + n * it.st, it.lo, it.hi);
+}
+function exAdjust(n) {
+  const { it, key } = exSel;
+  if (it.t !== 'opt' && it.t !== 'num') return;
+  radio.setEx(key, exEncode(it, exStep(it, s.ex[key], n)));
+  drawSettings();
+}
+function openSettings(i) {
+  exMenu = EX_MENUS[i];
+  $('#exmTitle').textContent = exMenu.name;
+  $('#exm').hidden = false;
+  openExGroup(exMenu.groups[0]);
+}
+function closeSettings() { $('#exm').hidden = true; exMenu = exGroup = exSel = null; render(); }
+function openExGroup(g) {
+  exGroup = g; exSel = null;
+  const gl = $('#exmGroups');
+  gl.innerHTML = '';
+  exMenu.groups.forEach((x) => {
+    const b = document.createElement('button');
+    b.className = `exm-g${x === g ? ' cur' : ''}`;
+    b.textContent = x.name;
+    b.addEventListener('click', () => openExGroup(x));
+    gl.appendChild(b);
+  });
+  const il = $('#exmItems');
+  il.innerHTML = '';
+  il.scrollTop = 0;
+  g.items.forEach((it) => {
+    const key = g.key + it.p;
+    const row = document.createElement('div');
+    row.className = `exm-i${it.t === 'na' ? ' na' : ''}`;
+    row.innerHTML = '<span class="n"></span><button class="v"></button>';
+    row.firstChild.textContent = it.name;
+    row.dataset.key = key;
+    const pick = () => { if (it.t === 'na') { toast(`${it.name} は CAT では操作できません`); return false; } exSel = { it, key }; drawSettings(); return true; };
+    row.addEventListener('click', pick);
+    row.lastChild.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!pick()) return;
+      if (it.t === 'text') {
+        const t = prompt(`${it.name}（最大 ${it.n} 文字）`, (s.ex[key] || '').trim());
+        if (t != null) radio.setEx(key, t.slice(0, it.n));
+      } else exAdjust(e.shiftKey ? -1 : 1);
+    });
+    row.addEventListener('wheel', (e) => { e.preventDefault(); if (pick()) exAdjust(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+    il.appendChild(row);
+    if (it.t !== 'na' && radio.connected) radio.send(`EX${key};`, { read: true });
+  });
+  drawSettings();
+}
+function drawSettings() {
+  if (!exGroup) return;
+  for (const row of $('#exmItems').children) {
+    const it = exGroup.items.find((x) => exGroup.key + x.p === row.dataset.key);
+    setText(row.lastChild, radio.connected ? exText(it, s.ex[row.dataset.key]) : '—');
+    row.classList.toggle('sel', exSel?.key === row.dataset.key);
+  }
+}
+
 // ---------------- side panel VFO keys (app functions not on the radio's FUNC pages) ----------------
 function setupVfoKeys() {
   const acts = { lock: () => radio.setLock(!s.lock), dual: () => radio.setDual(!s.dual), atob: () => radio.copyAtoB(), btoa: () => radio.copyBtoA(), step: () => ACTIONS.step() };
@@ -1328,6 +1418,7 @@ function draw() {
 }
 
 radio.addEventListener('change', () => {
+  if (exGroup) drawSettings();
   if (radio.connected) { ui.fine = s.fn === 1; ui.fast = s.fn === 2; }
   if (s.nb[V()] > 0) ui.lastNb = s.nb[V()];
   if (s.nr[V()] > 0) ui.lastNr = s.nr[V()];
@@ -1351,6 +1442,7 @@ setupAudio();
 setupSettings();
 setupSidebar();
 setupVfoKeys();
+$('#exmBack').addEventListener('click', closeSettings);
 setupDecoder();
 render();
 
