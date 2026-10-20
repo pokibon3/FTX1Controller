@@ -1258,6 +1258,17 @@ setupSidebar();
 setupDecoder();
 render();
 
+// PWA install button (Chrome / Edge): shown while the app can be installed and is not already running as one
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; $('#btnInstall').hidden = false; });
+window.addEventListener('appinstalled', () => { installEvt = null; $('#btnInstall').hidden = true; toast('アプリとしてインストールしました'); });
+$('#btnInstall').addEventListener('click', async () => {
+  if (!installEvt) return;
+  installEvt.prompt();
+  await installEvt.userChoice.catch(() => {});
+  installEvt = null;
+  $('#btnInstall').hidden = true;
+});
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
 }

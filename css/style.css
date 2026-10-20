@@ -607,3 +607,5 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
 .st-bar .si.blink { animation: blink 1s steps(2, start) infinite; }
 @keyframes blink { to { visibility: hidden; } }
+
+.sb-install { border: 1px solid #a85a14; border-radius: 3px; padding: 1px 8px; background: linear-gradient(180deg, #8a4a12, #5c300a); color: #ffe2c4; font: inherit; font-weight: 700; cursor: pointer; }
