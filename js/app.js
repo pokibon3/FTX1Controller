@@ -10,6 +10,7 @@ import { FtxMeter } from './ftxmeter.js';
 import { FilterDisplay } from './filterdisp.js';
 import { APP_VERSION } from './version.js';
 import { CwDecoder } from './cwdecoder.js';
+import { Ft8Decoder } from './ft8.js';
 import { installDigitGlyphs } from './digits.js';
 import { EX_MENUS } from './exmenu.js';
 
@@ -31,7 +32,7 @@ const DEFAULTS = {
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'lr', layoutV2: true,
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
-  sidebar: false, sections: {}, afFft: true, dec: true, decCh: 'L', decGain: 0, console: false,
+  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, dec: true, decCh: 'L', decGain: 0, console: false,
 };
 const cfg = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
@@ -1283,6 +1284,55 @@ function setupVfoKeys() {
   }, 300);
 }
 
+// ---------------- FT8 receive (on RX audio) ----------------
+function setupFt8() {
+  const ft8 = new Ft8Decoder();
+  const list = $('#ft8List');
+  let rows = [];
+  const draw = () => {
+    const shown = cfg.ft8Cq ? rows.filter((r) => /^CQ\b/.test(r.text)) : rows;
+    list.innerHTML = '';
+    let lastUtc = null;
+    for (const r of shown) {
+      const el = document.createElement('div');
+      el.className = `ft8-row${/^CQ\b/.test(r.text) ? ' cq' : ''}${r.utc !== lastUtc ? ' first' : ''}`;
+      lastUtc = r.utc;
+      for (const t of [r.utc, r.snr > 0 ? `+${r.snr}` : r.snr, r.dt.toFixed(1), r.freq, r.text]) {
+        const c = document.createElement('span'); c.textContent = t; el.appendChild(c);
+      }
+      list.appendChild(el);
+    }
+  };
+  ft8.addEventListener('decoded', (e) => {
+    rows = [...e.detail.rows, ...rows].slice(0, 300); // newest slot on top
+    $('#ft8Info').textContent = `${e.detail.utc} · ${e.detail.rows.length} 件`;
+    draw();
+  });
+  let pending = null;
+  const sync = async () => {
+    const rx = audio.rx;
+    if (!cfg.ft8 || !rx) { pending = null; ft8.stop(); return; }
+    if (ft8.ctx === rx.ctx || pending === rx.ctx) return;
+    pending = rx.ctx;
+    try { await ft8.start(rx.ctx, rx.src); } catch (err) { toast(`FT8 デコーダ開始失敗: ${err.message}`, true); }
+    if (pending === rx.ctx) pending = null;
+  };
+  audio.addEventListener('state', sync);
+  ft8.addEventListener('state', () => $('#btnFt8').classList.toggle('on', ft8.active));
+  $('#btnFt8').classList.toggle('on', cfg.ft8);
+  $('#btnFt8').addEventListener('click', () => {
+    cfg.ft8 = !cfg.ft8; save();
+    $('#btnFt8').classList.toggle('on', cfg.ft8);
+    if (cfg.ft8 && !audio.rx) startRxAudio();
+    sync();
+  });
+  $('#btnFt8Clr').addEventListener('click', () => { rows = []; draw(); });
+  $('#ft8Cq').checked = cfg.ft8Cq;
+  $('#ft8Cq').addEventListener('change', (e) => { cfg.ft8Cq = e.target.checked; save(); draw(); });
+  setInterval(() => { $('#ft8Bar').style.width = `${(ft8.secInSlot / 15) * 100}%`; }, 200);
+  sync();
+}
+
 // ---------------- right sidebar (USB AUDIO / SETUP) ----------------
 function setupSidebar() {
   $('#sbVer').textContent = `v${APP_VERSION}`;
@@ -1428,6 +1478,7 @@ function draw() {
   const cw = isCW(s.mode[V()]);
   $('#panelCw').hidden = !cw;
   $('#panelDec').hidden = !cw;
+  $('#panelFt8').hidden = !['C', '8'].includes(s.mode[V()]);
   $('#cwWpm').textContent = `${s.ks} WPM`;
   $('#catErr').textContent = `ERR ${s.errors}`;
   $('#catErr').classList.toggle('err', s.errors > 0);
@@ -1462,6 +1513,7 @@ setupSidebar();
 setupVfoKeys();
 $('#exmBack').addEventListener('click', closeSettings);
 setupDecoder();
+setupFt8();
 render();
 
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;

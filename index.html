@@ -248,6 +248,19 @@
       <p class="hint">US/JP: 欧文・和文 / AUTO: 500〜1000Hz に自動同調（押すごとに 600〜1000Hz 手動）。</p>
     </div>
 
+    <!-- FT8 receive: shown in DATA-U / DATA-L -->
+    <div class="panel panel-wide" id="panelFt8" hidden>
+      <h2>FT8 <span class="tag">RX</span><span class="ft8-slot" id="ft8Slot"><i id="ft8Bar"></i></span><span class="h2-sp"></span><span class="tag" id="ft8Info">--</span></h2>
+      <div class="ft8-head"><span>UTC</span><span>dB</span><span>DT</span><span>Freq</span><span>Message</span></div>
+      <div class="ft8-list" id="ft8List"></div>
+      <div class="cw-keys ft8-keys">
+        <button class="btn" id="btnFt8" title="RX音声の FT8 をデコード（USB AUDIO RX 開始中に動作）">DECODE</button>
+        <button class="btn" id="btnFt8Clr">CLR</button>
+        <label class="chk"><input type="checkbox" id="ft8Cq"> CQ のみ</label>
+      </div>
+      <p class="hint">15 秒ごと（UTC :00 / :15 / :30 / :45）に解読します。PC の時計が ±1 秒以内に合っている必要があります。デコーダは ft8_lib（MIT）。</p>
+    </div>
+
     <div class="panel panel-wide" id="panelConsole" hidden>
       <h2>CAT CONSOLE <span class="tag" id="catErr">ERR 0</span></h2>
       <div class="log" id="log"></div>
