@@ -1,5 +1,20 @@
 // Rotary controls: small knobs (drag/wheel/keys -> steps) and the main tuning dial (angular drag with flywheel)
 
+// One mouse-wheel notch = one step, however slowly or quickly it is turned: the scroll amount (which macOS accelerates
+// with speed) is ignored, only its direction counts. A notch can arrive as a burst of events (smooth scrolling): events
+// following each other within BURST_MS are one notch; a long stream of them (trackpad) gives a step every STREAM_MS.
+// state: an object kept per control.
+const BURST_MS = 40, STREAM_MS = 120;
+export function wheelNotch(e, state) {
+  if (!e.deltaY) return 0;
+  const now = performance.now();
+  const newBurst = now - (state.last || 0) > BURST_MS;
+  state.last = now;
+  if (!newBurst && now - (state.step || 0) < STREAM_MS) return 0;
+  state.step = now;
+  return e.deltaY < 0 ? 1 : -1;
+}
+
 export class Knob {
   constructor(el, { onTurn, onPress, pxPerStep = 5 } = {}) {
     this.el = el;
@@ -7,7 +22,7 @@ export class Knob {
     this.onTurn = onTurn;
     this.pxPerStep = pxPerStep;
     this.acc = 0;
-    this.wheelAcc = 0;
+    this.wheelState = {};
     this.free = 0;
     this.active = false;
     el.tabIndex = 0;
@@ -39,9 +54,8 @@ export class Knob {
     el.addEventListener('pointercancel', end);
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.wheelAcc += e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY;
-      const n = Math.trunc(this.wheelAcc / 40);
-      if (n) { this.wheelAcc -= n * 40; this._turn(-n); }
+      const n = wheelNotch(e, this.wheelState);
+      if (n) this._turn(n);
     }, { passive: false });
     el.addEventListener('keydown', (e) => {
       const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[e.key];
@@ -76,6 +90,7 @@ export class Dial {
     this.vel = 0;       // deg/ms for flywheel
     this.dragging = false;
     this.wheelAcc = 0;
+    this.wheelState = {};
 
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -109,12 +124,15 @@ export class Dial {
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    // main dial: accelerated (fast turning moves further), but every notch moves at least one step
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
+      const notch = wheelNotch(e, this.wheelState);
       this.wheelAcc += e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY;
-      const n = Math.trunc(this.wheelAcc / 20);
+      let n = Math.trunc(this.wheelAcc / 20);
+      if (!n && notch) n = -notch;
       if (n) {
-        this.wheelAcc -= n * 20;
+        this.wheelAcc = n === -notch && Math.abs(this.wheelAcc) < 20 ? 0 : this.wheelAcc - n * 20;
         this._rotate((-n * 360) / this.stepsPerRev);
       }
     }, { passive: false });

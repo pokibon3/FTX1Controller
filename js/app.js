@@ -4,7 +4,7 @@ import {
 } from './ftx1.js';
 import { SerialLink } from './serial.js';
 import { AudioEngine, isRadioDevice } from './audio.js';
-import { Knob, Dial } from './knob.js';
+import { Knob, Dial, wheelNotch } from './knob.js';
 import { AfScope } from './scope.js';
 import { FtxMeter } from './ftxmeter.js';
 import { FilterDisplay } from './filterdisp.js';
@@ -480,13 +480,14 @@ function setupBands() {
     const band = $(`#band${v}`);
     const fel = $(`#freq${v}`);
     fel.addEventListener('click', () => openEntry(v));
+    const wheel = {};
     fel.addEventListener('wheel', (e) => {
       const d = e.target.closest('.d');
       if (!d) return;
       e.preventDefault();
-      if (s.lock) return;
-      const place = +d.dataset.p;
-      radio.setFreq(v, s.freq[v] + (e.deltaY < 0 ? place : -place));
+      const n = wheelNotch(e, wheel);
+      if (!n || s.lock) return;
+      radio.setFreq(v, s.freq[v] + n * +d.dataset.p);
     }, { passive: false });
     band.querySelector('.b-mode').addEventListener('click', () => openPop('MODE', v));
     band.querySelector('.b-tags').addEventListener('click', () => { if (s.vs !== v) radio.selectVFO(v); });
@@ -1335,6 +1336,7 @@ function exStep(it, raw, n) {
 // turning (wheel / FUNC knob) shows each step at once; the radio gets the final value once turning has stopped for a
 // moment (fewer writes to it)
 let exTimer = null, exPending = null;
+const exWheel = {}; // (one wheel state for all rows of the settings menu)
 function exFlush() {
   clearTimeout(exTimer);
   // (turned back to where it started: nothing to send)
@@ -1391,7 +1393,7 @@ function openExGroup(g) {
         if (t != null && t.slice(0, it.n) !== (s.ex[key] || '').trim()) radio.setEx(key, t.slice(0, it.n));
       } else exAdjust(e.shiftKey ? -1 : 1);
     });
-    row.addEventListener('wheel', (e) => { e.preventDefault(); if (pick()) exAdjust(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+    row.addEventListener('wheel', (e) => { e.preventDefault(); const n = wheelNotch(e, exWheel); if (n && pick()) exAdjust(n); }, { passive: false });
     il.appendChild(row);
     if (it.t !== 'na' && radio.connected) radio.send(`EX${key};`, { read: true });
   });
