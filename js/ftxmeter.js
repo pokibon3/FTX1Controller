@@ -16,6 +16,7 @@ export class FtxMeter {
     this.pos = 0;
     this.vel = 0;
     this.vol = 0;
+    this.volLabel = 'VOL'; // the bottom row follows the AF/RF/SQL knob: VOL / RF / SQL
     this.dimmed = false;
     this.face = document.createElement('canvas');
     this.key = '';
@@ -32,7 +33,7 @@ export class FtxMeter {
     this.dimmed = dimmed;
   }
   set(raw) { this.target = Math.min(255, Math.max(0, raw || 0)); }
-  setVol(f) { this.vol = Math.min(1, Math.max(0, f || 0)); }
+  setVol(f, label = 'VOL') { this.vol = Math.min(1, Math.max(0, f || 0)); this.volLabel = label; }
 
   _geom(W, H) {
     // shallow arcs as on the radio; rows from the top: dB, S figures, S arc, PO figures, PO arc, VOL
@@ -143,7 +144,7 @@ export class FtxMeter {
     const dpr = window.devicePixelRatio || 1;
     const W = Math.max(10, Math.round(this.cv.clientWidth * dpr));
     const H = Math.max(10, Math.round(this.cv.clientHeight * dpr));
-    const key = `${W}x${H}|${this.dimmed}|${JSON.stringify([this.top, this.bottom])}`;
+    const key = `${W}x${H}|${this.dimmed}|${this.volLabel}|${JSON.stringify([this.top, this.bottom])}`;
     if (key === this.key) return;
     this.key = key;
     this.cv.width = this.face.width = W;
@@ -159,7 +160,7 @@ export class FtxMeter {
     c.font = `italic 700 ${Math.min(H * 0.18, W * 0.045)}px ${FONT}`;
     c.textAlign = 'left';
     c.textBaseline = 'middle';
-    c.fillText('VOL', H * 0.04, H * 0.93);
+    c.fillText(this.volLabel, H * 0.04, H * 0.93);
     c.globalAlpha = 1;
   }
 

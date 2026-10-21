@@ -581,7 +581,9 @@ function drawMeters() {
     m.configure({ top: S_SCALE, bottom, reading: txBand ? 'bottom' : 'top', dimmed: s.tx && !txBand });
     const rxOn = v === 0 || s.dual || s.vs === 1;
     m.set(txBand ? s.meters[cfg.meterSel] : s.tx || !rxOn ? 0 : s.smeter[v]);
-    m.setVol(s.af[v] / 255);
+    // bottom row: what the AF/RF/SQL knob turns now (VOL = AF GAIN), as on the radio
+    const kind = knobMode(v);
+    m.setVol((kind === 'sql' ? s.sql[v] : kind === 'rf' ? s.rf[v] : s.af[v]) / 255, kind === 'sql' ? 'SQL' : kind === 'rf' ? 'RF' : 'VOL');
   }
 }
 
