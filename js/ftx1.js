@@ -173,6 +173,7 @@ export class FTX1 extends EventTarget {
           this.baud = b;
           this.port = port;
           this.s.errors = 0; // count rejections per connection
+          this.s.synced = false; // until the radio has answered with a frequency, the screen shows nothing
           this.pending = [];
           this.probing = false;
           this._emit('connection');
@@ -341,6 +342,7 @@ export class FTX1 extends EventTarget {
 
     switch (c) {
       case 'FA': case 'FB': {
+        s.synced = true;
         const vfo = c === 'FA' ? 0 : 1;
         if (/^\d{9}$/.test(p) && ok(c)) s.freq[vfo] = +p;
         break;
@@ -465,9 +467,9 @@ export class FTX1 extends EventTarget {
     this._set(c, `${c}${pad(hz, 9)};`, () => { this.s.freq[vfo] = hz; });
   }
   setMode(vfo, code) { this._set('MD' + vfo, `MD${vfo}${code};`, () => { this.s.mode[vfo] = code; }); }
-  setAF(vfo, v) { v = clamp(Math.round(v), 0, 255); this._set('AG' + vfo, `AG${vfo}${pad(v, 3)};`, () => { this.s.af[vfo] = v; }); }
-  setRF(vfo, v) { v = clamp(Math.round(v), 0, 255); this._set('RG' + vfo, `RG${vfo}${pad(v, 3)};`, () => { this.s.rf[vfo] = v; }); }
-  setSQL(vfo, v) { v = clamp(Math.round(v), 0, 255); this._set('SQ' + vfo, `SQ${vfo}${pad(v, 3)};`, () => { this.s.sql[vfo] = v; }); }
+  setAF(vfo, v) { v = clamp(Math.round(v), 0, 255); if (v === this.s.af[vfo]) return; this._set('AG' + vfo, `AG${vfo}${pad(v, 3)};`, () => { this.s.af[vfo] = v; }); }
+  setRF(vfo, v) { v = clamp(Math.round(v), 0, 255); if (v === this.s.rf[vfo]) return; this._set('RG' + vfo, `RG${vfo}${pad(v, 3)};`, () => { this.s.rf[vfo] = v; }); }
+  setSQL(vfo, v) { v = clamp(Math.round(v), 0, 255); if (v === this.s.sql[vfo]) return; this._set('SQ' + vfo, `SQ${vfo}${pad(v, 3)};`, () => { this.s.sql[vfo] = v; }); }
 
   // PC P1 1: field head, 2: SPA-1 005-100 W. The manual lists 005-010 W for the field head,
   // 0.5 W steps ("PC10.5;") are kept because low power is used in practice.
@@ -477,20 +479,21 @@ export class FTX1 extends EventTarget {
   setPower(w) {
     const { min, max, step } = this.powerRange();
     w = clamp(Math.round(w / step) * step, min, max);
+    if (w === this.s.power) return;
     const head = this.s.pwrHead === 2 ? 2 : 1;
     const body = Number.isInteger(w) ? pad(w, 3) : w.toFixed(1);
     this._set('PC', `PC${head}${body};`, () => { this.s.power = w; });
   }
-  setMic(v) { v = clamp(Math.round(v), 0, 100); this._set('MG', `MG${pad(v, 3)};`, () => { this.s.mic = v; }); }
-  setKeySpeed(v) { v = clamp(Math.round(v), 4, 60); this._set('KS', `KS${pad(v, 3)};`, () => { this.s.ks = v; }); }
-  setPitch(v) { v = clamp(Math.round(v), 0, 75); this._set('KP', `KP${pad(v, 2)};`, () => { this.s.kp = v; }); }
+  setMic(v) { v = clamp(Math.round(v), 0, 100); if (v === this.s.mic) return; this._set('MG', `MG${pad(v, 3)};`, () => { this.s.mic = v; }); }
+  setKeySpeed(v) { v = clamp(Math.round(v), 4, 60); if (v === this.s.ks) return; this._set('KS', `KS${pad(v, 3)};`, () => { this.s.ks = v; }); }
+  setPitch(v) { v = clamp(Math.round(v), 0, 75); if (v === this.s.kp) return; this._set('KP', `KP${pad(v, 2)};`, () => { this.s.kp = v; }); }
   setBreakIn(on) { this._set('BI', `BI${on ? 1 : 0};`, () => { this.s.bkin = on; }); }
   setVox(on) { this._set('VX', `VX${on ? 1 : 0};`, () => { this.s.vox = on; }); }
-  setVoxGain(v) { v = clamp(Math.round(v), 0, 100); this._set('VG', `VG${pad(v, 3)};`, () => { this.s.voxGain = v; }); }
-  setMonitor(v) { v = clamp(Math.round(v), 0, 100); this._set('ML', `ML1${pad(v, 3)};`, () => { this.s.moni = v; }); }
+  setVoxGain(v) { v = clamp(Math.round(v), 0, 100); if (v === this.s.voxGain) return; this._set('VG', `VG${pad(v, 3)};`, () => { this.s.voxGain = v; }); }
+  setMonitor(v) { v = clamp(Math.round(v), 0, 100); if (v === this.s.moni) return; this._set('ML', `ML1${pad(v, 3)};`, () => { this.s.moni = v; }); }
   setMonitorOn(on) { this._set('MLo', `ML0${on ? '001' : '000'};`, () => { this.s.moniOn = on; }); }
-  setNB(vfo, v) { v = clamp(Math.round(v), 0, 10); this._set('NL' + vfo, `NL${vfo}${pad(v, 3)};`, () => { this.s.nb[vfo] = v; }); }
-  setNR(vfo, v) { v = clamp(Math.round(v), 0, 10); this._set('RL' + vfo, `RL${vfo}${pad(v, 2)};`, () => { this.s.nr[vfo] = v; }); }
+  setNB(vfo, v) { v = clamp(Math.round(v), 0, 10); if (v === this.s.nb[vfo]) return; this._set('NL' + vfo, `NL${vfo}${pad(v, 3)};`, () => { this.s.nb[vfo] = v; }); }
+  setNR(vfo, v) { v = clamp(Math.round(v), 0, 10); if (v === this.s.nr[vfo]) return; this._set('RL' + vfo, `RL${vfo}${pad(v, 2)};`, () => { this.s.nr[vfo] = v; }); }
   setNarrow(vfo, on) { this._set('NA' + vfo, `NA${vfo}${on ? 1 : 0};`, () => { this.s.nar[vfo] = on; }); }
   setBeatCancel(vfo, on) { this._set('BC' + vfo, `BC${vfo}${on ? 1 : 0};`, () => { this.s.bc[vfo] = on; }); }
   setNotch(vfo, on) { this._set('BPo' + vfo, `BP${vfo}0${on ? '001' : '000'};`, () => { this.s.notch[vfo] = on; }); }
@@ -514,7 +517,7 @@ export class FTX1 extends EventTarget {
     v = clamp(v, 0, bt === 0 ? 2 : 1);
     this._set('PA' + bt, `PA${bt}${v};`, () => { this.s.preamp[bt] = v; });
   }
-  setAGC(vfo, v) { v = clamp(v, 0, 4); this._set('GT' + vfo, `GT${vfo}${v};`, () => { this.s.agc[vfo] = v; }); }
+  setAGC(vfo, v) { v = clamp(v, 0, 4); if (v === this.s.agc[vfo]) return; this._set('GT' + vfo, `GT${vfo}${v};`, () => { this.s.agc[vfo] = v; }); }
   // IS P1 0 +/- 0000-1200 (20 Hz steps); "off" is sent as 0 Hz
   setShift(vfo, on, hz) {
     hz = clamp(Math.round(hz / 20) * 20, -1200, 1200);
@@ -523,7 +526,7 @@ export class FTX1 extends EventTarget {
       this.s.shiftOn[vfo] = on && hz !== 0; if (hz) this.s.shift[vfo] = hz;
     });
   }
-  setWidth(vfo, code) { code = clamp(code, 0, widthMax(this.s.mode[vfo])); this._set('SH' + vfo, `SH${vfo}0${pad(code, 2)};`, () => { this.s.width[vfo] = code; }); }
+  setWidth(vfo, code) { code = clamp(code, 0, widthMax(this.s.mode[vfo])); if (code === this.s.width[vfo]) return; this._set('SH' + vfo, `SH${vfo}0${pad(code, 2)};`, () => { this.s.width[vfo] = code; }); }
   setFuncKnob(code) { this._set('SF', `SF0${code};`, () => { this.s.sf = code; }); }
   setFine(n) { this._set('FN', `FN${n};`, () => { this.s.fn = n; }); }
   setMeterSel(main, sub) { this._set('MS', `MS${main}${sub};`, () => { this.s.ms = [main, sub]; }); }
@@ -540,8 +543,8 @@ export class FTX1 extends EventTarget {
   setMicEq(on) { this._set('PR1', `PR1${on ? 2 : 1};`, () => { this.s.micEq = on; }); }
   setRptShift(vfo, n) { this._set('OS' + vfo, `OS${vfo}${n};`, () => { this.s.os[vfo] = n; }); }
   setSqlType(vfo, n) { this._set('CT' + vfo, `CT${vfo}${n};`, () => { this.s.ct[vfo] = n; }); }
-  setTone(vfo, n) { n = clamp(n, 0, 49); this._set(`CN${vfo}0`, `CN${vfo}0${pad(n, 3)};`, () => { this.s.tone[vfo] = n; }); }
-  setDcs(vfo, n) { n = clamp(n, 0, 103); this._set(`CN${vfo}1`, `CN${vfo}1${pad(n, 3)};`, () => { this.s.dcs[vfo] = n; }); }
+  setTone(vfo, n) { n = clamp(n, 0, 49); if (n === this.s.tone[vfo]) return; this._set(`CN${vfo}0`, `CN${vfo}0${pad(n, 3)};`, () => { this.s.tone[vfo] = n; }); }
+  setDcs(vfo, n) { n = clamp(n, 0, 103); if (n === this.s.dcs[vfo]) return; this._set(`CN${vfo}1`, `CN${vfo}1${pad(n, 3)};`, () => { this.s.dcs[vfo] = n; }); }
   setEx(key, val) { this._set('EX' + key, `EX${key}${val};`, () => { this.s.ex[key] = String(val); }); }
   playMessage(n) { this.send(`KY1${n};`); }      // CW MESSAGE memory 1-5, 0 = stop
   playVoice(n) { this.send(`PB0${n};`); }        // voice memory 1-5, 0 = play/stop
@@ -555,10 +558,10 @@ export class FTX1 extends EventTarget {
     const d = [...this.s.dim]; d[i] = clamp(Math.round(v), 0, 20);
     this._set('DA', `DA00${d.map((x) => pad(x, 2)).join('')};`, () => { this.s.dim = d; });
   }
-  setProc(v) { v = clamp(Math.round(v), 0, 100); this._set('PL', `PL${pad(v, 3)};`, () => { this.s.proc = v; }); }
-  setAmc(v) { v = clamp(Math.round(v), 1, 100); this._set('AO', `AO${pad(v, 3)};`, () => { this.s.amc = v; }); }
-  setVoxDelay(v) { v = clamp(Math.round(v), 0, 33); this._set('VD', `VD${pad(v, 2)};`, () => { this.s.voxDelay = v; }); }
-  setBkDelay(v) { v = clamp(Math.round(v), 0, 33); this._set('SD', `SD${pad(v, 2)};`, () => { this.s.bkDelay = v; }); }
+  setProc(v) { v = clamp(Math.round(v), 0, 100); if (v === this.s.proc) return; this._set('PL', `PL${pad(v, 3)};`, () => { this.s.proc = v; }); }
+  setAmc(v) { v = clamp(Math.round(v), 1, 100); if (v === this.s.amc) return; this._set('AO', `AO${pad(v, 3)};`, () => { this.s.amc = v; }); }
+  setVoxDelay(v) { v = clamp(Math.round(v), 0, 33); if (v === this.s.voxDelay) return; this._set('VD', `VD${pad(v, 2)};`, () => { this.s.voxDelay = v; }); }
+  setBkDelay(v) { v = clamp(Math.round(v), 0, 33); if (v === this.s.bkDelay) return; this._set('SD', `SD${pad(v, 2)};`, () => { this.s.bkDelay = v; }); }
   setScope(item, code) { this._set('SS' + item, `SS0${item}${code}0000;`, () => { this.s.scope[item] = String(code); }); }
   // Radio's CAT-1 / CAT-2 rate (EX 03 01 05 / 08; P4 0:4800 1:9600 2:19200 3:38400 4:115200).
   // The rate of the port in use changes too, so reopen it at the new rate afterwards.
@@ -620,24 +623,4 @@ export class FTX1 extends EventTarget {
     this._pump();
     this._changed();
   }
-
-  // The FTX-1 has no direct CW text command: write up to 50 chars into keyer TEXT memory (KM, '}'-terminated)
-  // and play it back with KY0n. This overwrites the radio's CW TEXT memory CW_SLOT.
-  async sendCW(text, signal) {
-    const CW_SLOT = 5;
-    text = text.toUpperCase().replace(/[^A-Z0-9 /?.,=+\-@()'"!:&]/g, '');
-    for (let i = 0; i < text.length; i += 50) {
-      if (signal?.aborted) return;
-      const chunk = text.slice(i, i + 50);
-      this.send(`KM${CW_SLOT}${chunk}};`);
-      this.send(`KY0${CW_SLOT};`);
-      // ~10 dit units per char on average at PARIS timing
-      const ms = chunk.length * 10 * (1200 / this.s.ks) + 200;
-      await new Promise((r) => {
-        const t = setTimeout(r, ms);
-        signal?.addEventListener('abort', () => { clearTimeout(t); r(); }, { once: true });
-      });
-    }
-  }
-  stopCW() { this.send('KY00;'); }
 }

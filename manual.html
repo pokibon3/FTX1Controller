@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FTX-1 Controller 使い方</title>
+<style>
+:root {
+  --bg: #0f1012; --panel: #17191c; --line: #2a2d32; --text: #e6e8eb; --dim: #9aa0a8;
+  --accent: #ff9f1a; --link: #6fb7ff; --ok: #3ddc84; --warn: #ffbf3a; --tx: #ff5a4f; --code: #0b0c0e;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 12px; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.75 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 80px; }
+header { border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 8px; }
+h1 { font-size: 24px; margin: 0; letter-spacing: .04em; }
+h1 small { font-size: 13px; color: var(--dim); font-weight: 400; margin-left: 8px; }
+.lead { color: var(--dim); margin: 6px 0 0; }
+h2 { font-size: 19px; margin: 40px 0 10px; padding: 6px 10px; background: var(--panel); border-left: 4px solid var(--accent); border-radius: 4px; }
+h3 { font-size: 16px; margin: 26px 0 6px; color: #f3f4f6; }
+p { margin: 8px 0; }
+a { color: var(--link); }
+ol, ul { padding-left: 1.4em; margin: 8px 0; }
+li { margin: 3px 0; }
+code, kbd { font-family: ui-monospace, Menlo, monospace; font-size: .9em; background: var(--code); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+kbd { border-bottom-width: 2px; }
+.btn { display: inline-block; font-size: .85em; font-weight: 700; padding: 0 7px; border-radius: 5px; background: #2a2e34; border: 1px solid #3a3f46; white-space: nowrap; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 14px; }
+th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; }
+th { background: var(--panel); white-space: nowrap; }
+.toc { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 18px; margin: 18px 0; }
+.toc ol { margin: 4px 0; }
+.note, .warn { border-radius: 6px; padding: 8px 12px; margin: 12px 0; font-size: 14px; }
+.note { background: #13202b; border: 1px solid #234059; }
+.warn { background: #2a1d10; border: 1px solid #5a3d14; }
+.note b:first-child, .warn b:first-child { margin-right: 4px; }
+dl { margin: 8px 0; }
+dt { font-weight: 700; margin-top: 12px; }
+dd { margin: 2px 0 0 1.2em; color: #d2d6db; }
+footer { margin-top: 48px; color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); padding-top: 12px; }
+@media (max-width: 600px) {
+  body { font-size: 14px; }
+  table { font-size: 13px; }
+  th, td { padding: 5px 6px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>FTX-1 Controller 使い方<small id="ver"></small></h1>
+  <p class="lead">八重洲無線 FTX-1 を、パソコンの Chrome から操作するアプリです。本体の画面とツマミを模した操作、受信音の再生、CW の解読と送信、FT8 / FT4 の運用ができます。</p>
+</header>
+
+<nav class="toc">
+  <b>目次</b>
+  <ol>
+    <li><a href="#need">必要なもの</a></li>
+    <li><a href="#install">インストール（アプリを開く）</a></li>
+    <li><a href="#radio">本体側の設定</a></li>
+    <li><a href="#connect">接続する</a></li>
+    <li><a href="#screen">画面の見方と基本操作</a></li>
+    <li><a href="#side">左側パネル（USB AUDIO / CW DECODER / VFO / SETUP）</a></li>
+    <li><a href="#cw">CW（受信・送信）</a></li>
+    <li><a href="#ft8">FT8 / FT4</a></li>
+    <li><a href="#setting">本体の設定メニュー</a></li>
+    <li><a href="#trouble">困ったときは</a></li>
+  </ol>
+</nav>
+
+<h2 id="need">1. 必要なもの</h2>
+<ul>
+  <li><b>FTX-1</b> と、パソコンにつなぐ <b>USB ケーブル</b>（本体の USB 端子 ⇔ パソコン）</li>
+  <li><b>Google Chrome</b>（または Microsoft Edge）。シリアル通信（Web Serial）を使うため、Safari や Firefox では動きません。</li>
+  <li>Windows では、八重洲無線の「仮想 COM ポートドライバ」（Silicon Labs CP210x）が必要な場合があります。Mac は追加のドライバー不要です。</li>
+</ul>
+<p>USB ケーブル 1 本で、次の 3 つがパソコンにつながります。</p>
+<table>
+  <tr><th>パソコンでの見え方</th><th>このアプリでの使い方</th></tr>
+  <tr><td>シリアルポート 1 本目（Enhanced Com Port / CAT-1）</td><td>本体の操作（CAT）。<span class="btn">POWER</span> で接続します。</td></tr>
+  <tr><td>シリアルポート 2 本目（Standard Com Port / CAT-2）</td><td>CW の直接キーイング、RTS/DTR 方式の PTT。<span class="btn">CWキーイング</span> で接続します。</td></tr>
+  <tr><td>USB Audio CODEC（Mac では「USB Audio Device」）</td><td>受信音をパソコンで再生、パソコンの音（FT8 など）を本体へ送る。</td></tr>
+</table>
+
+<h2 id="install">2. インストール（アプリを開く）</h2>
+<h3>Web 版（おすすめ）</h3>
+<ol>
+  <li>Chrome で <a href="https://pokibon3.github.io/FTX1Controller/">https://pokibon3.github.io/FTX1Controller/</a> を開きます。これだけで使えます。</li>
+  <li>アプリとして使うときは、左側パネル（<span class="btn">☰</span>）の SETUP にある <span class="btn">インストール</span> を押すか、Chrome のアドレスバー右の「インストール」アイコンを押します。</li>
+  <li>インストールすると、独立したウインドウで起動でき、インターネットにつながっていなくても動きます。</li>
+</ol>
+<div class="note"><b>更新</b>新しい版が公開されると、次にアプリを開いたときに自動で入れ替わります。すぐに反映したいときは <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>（Windows は <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>）で読み込み直します。今の版は画面右下に表示されます。</div>
+
+<h3>ローカル版（Mac・開発用）</h3>
+<ol>
+  <li>リポジトリのフォルダにある <code>start.command</code> をダブルクリックします。ターミナルが開き、Chrome で <code>http://localhost:8765</code> が開きます。</li>
+  <li>使っている間は、ターミナルのウインドウを閉じないでください（閉じるとアプリが読み込めなくなります）。</li>
+</ol>
+<div class="warn"><b>注意</b>HTML ファイルを直接開く（<code>file://</code>）と動きません。Web 版か <code>start.command</code> で開いてください。</div>
+
+<h3>アンインストール</h3>
+<p>インストールしたアプリのウインドウ右上の <span class="btn">⋮</span> →「FTX-1 Controller をアンインストール」を選びます。</p>
+
+<h2 id="radio">3. 本体側の設定</h2>
+<p>本体の設定メニュー（または、アプリの設定メニュー → <a href="#setting">9 章</a>）で、使う機能に合わせて次を設定します。項目は 本体の [FUNC] ツマミ長押し → 設定画面 から選びます。</p>
+<table>
+  <tr><th>使う機能</th><th>設定</th><th>値</th></tr>
+  <tr><td>本体の操作（必須）</td><td>OPERATION SETTING → GENERAL → CAT-1 RATE</td><td>どれでもよい（アプリが自動で合わせます）。速いほど反応が良いので 38400 以上がおすすめ。</td></tr>
+  <tr><td>CW の送信</td><td>CW SETTING → MODE CW → <b>PC KEYING</b></td><td><b>DTR</b>（RTS でも可。PTT に RTS/DTR を使うときは、その線とは別の方）</td></tr>
+  <tr><td>CW の送信</td><td>BK-IN（ブレークイン）</td><td><b>ON</b>（FUNC メニュー 2/3 の BK-IN、または本体の BK-IN キー）</td></tr>
+  <tr><td>FT8 / FT4 の送信</td><td>RADIO SETTING → MODE DATA → MOD SOURCE</td><td><b>USB</b></td></tr>
+  <tr><td>FT8 / FT4 の送信</td><td>RADIO SETTING → MODE DATA → USB MOD GAIN</td><td>ALC が振れすぎない程度（アプリの LEVEL とあわせて調整）</td></tr>
+  <tr><td>受信音の大きさ</td><td>各モードの USB OUT LEVEL</td><td>初期値 50 のままで通常は十分</td></tr>
+</table>
+
+<h2 id="connect">4. 接続する</h2>
+<ol>
+  <li>FTX-1 の電源を入れ、USB ケーブルでパソコンにつなぎます。</li>
+  <li>アプリ左上の <span class="btn">POWER</span> を押します。初回はポートの一覧が出るので、<b>1 本目のポート</b>を選んで「接続」を押します。
+    <ul>
+      <li>Mac: <code>cu.usbserial-XXXXXXXX<b>0</b></code>（最後が 0）</li>
+      <li>Windows: 「Enhanced COM Port」と書かれた COM</li>
+      <li>違うポートを選ぶと「このポートは CAT に応答しません」と出ます。もう一方を選び直してください。</li>
+    </ul>
+  </li>
+  <li>POWER のランプが黄色（接続中）→ 緑（接続済み）になり、画面に本体の周波数が表示されます。受信音もパソコンで鳴り始めます。</li>
+  <li>2 回目からは、<span class="btn">POWER</span> を押すだけで前回のポートにつながります（ポートの一覧を出したいときは <kbd>Shift</kbd> を押しながら POWER）。</li>
+  <li>CW を送信するときは、左側パネルの SETUP → <span class="btn">CWキーイング</span> を押して、<b>2 本目のポート</b>（POWER で選んだのとは別のほう。Mac は最後が 1）を選びます。一度選ぶと、次からは POWER を押したときに自動でつながります。</li>
+</ol>
+<p><span class="btn">POWER</span> をもう一度押すと切断します（受信音・2 本目のポートも止まります）。</p>
+<div class="warn"><b>注意</b>WSJT-X など、ほかのソフトが同じポートを使っているとつながりません。どちらか一方だけを使ってください。</div>
+
+<h2 id="screen">5. 画面の見方と基本操作</h2>
+<p>画面は本体のフロントパネルと同じ配置です。中央が本体の液晶画面（LCD）、右がメインダイヤル、左右にツマミがあります。</p>
+<table>
+  <tr><th>部分</th><th>操作</th></tr>
+  <tr><td>メインダイヤル</td><td>ドラッグで回す（勢いをつけると回り続けます）、またはマウスホイール。刻みは LCD の VFO メニューの STEP、<span class="btn">FINE/FAST</span> キーで細かく・速く。</td></tr>
+  <tr><td>周波数の数字</td><td>数字の上でホイール → その桁を上下。周波数をクリック → 数字を直接入力。</td></tr>
+  <tr><td>MAIN / SUB の表示</td><td>クリックで操作する側を切り替え。モード表示（USB / CW など）のクリックでモード選択。</td></tr>
+  <tr><td>LCD 下段のキー</td><td>D-MODE / 3DSS / MULTI / SCOPE / SPAN / SPEED（本体のスコープ設定。MULTI はアプリの AF-FFT 表示）</td></tr>
+  <tr><td>フィルターの絵</td><td>タッチで WIDTH / SHIFT / NARROW / CONTOUR / APF / NOTCH の設定</td></tr>
+  <tr><td>上の横長キー</td><td>MAG（長押しで BAND）、N/W（長押しで MODE）、◢（押す: MAIN⇔SUB 入替 / 長押し: SPLIT）、V/M、M▸V など本体と同じ</td></tr>
+  <tr><td>FUNC ツマミ</td><td>押すとファンクションメニュー（3 ページ）。選んだ機能（RF POWER、MIC GAIN、CW SPEED など）をツマミで調整</td></tr>
+  <tr><td>左右下のツマミ</td><td>AF（音量）。押すと RF / SQL に切り替え</td></tr>
+  <tr><td>SUB DIAL</td><td>SUB 側の周波数</td></tr>
+  <tr><td><span class="btn">TX</span> キー</td><td>押している間送信（SETUP の LATCH で、クリックで送受切替）</td></tr>
+  <tr><td>メーター</td><td>受信中は S メーター、送信中は PO と ALC/SWR/COMP/ID/VDD（クリックで切替）</td></tr>
+  <tr><td>キーボード</td><td><kbd>↑</kbd><kbd>↓</kbd> 同調（<kbd>Shift</kbd> で 10 倍）、<kbd>PageUp</kbd><kbd>PageDown</kbd> バンド、<kbd>Space</kbd> 送信</td></tr>
+</table>
+<div class="note"><b>安全</b>送信中にウインドウのフォーカスが外れると PTT は自動で切れます。TOT（送信タイマー、初期値 3 分）でも送信を打ち切ります。</div>
+
+<h2 id="side">6. 左側パネル</h2>
+<p>左上の <span class="btn">☰</span>（SUB DIAL の上）で開閉します。各見出しのクリックで折りたためます。</p>
+<dl>
+  <dt>USB AUDIO RX（受信音）</dt>
+  <dd>入力（FTX-1）と出力（スピーカー）を選びます（通常は自動）。音量、<span class="btn">MUTE</span>、<span class="btn">● REC</span>（受信音の録音。ダウンロードフォルダに保存）。「本体スピーカーを消音」を ON にすると、本体の音を消して AF ツマミがパソコンの音量になります。</dd>
+  <dt>USB AUDIO TX（送信音声）</dt>
+  <dd>パソコンのマイクの音を本体へ送ります。<span class="btn">TX音声 ON</span> で開始、「PTT連動」で送信中だけ音を通す、「1kHz」で試験用の音。FT8 / FT4 の送信では自動で開始します。</dd>
+  <dt>CW DECODER</dt>
+  <dd>CW 解読に使う入力チャンネル（L / R / L+R）と入力ゲイン。</dd>
+  <dt>VFO</dt>
+  <dd>LOCK、DUAL RX、A▸B / B▸A、ダイヤルの刻み（STEP）。</dd>
+  <dt>SETUP</dt>
+  <dd>CAT ボーレート（通常は自動検出）、本体の CAT ボーレート書込、CAT CONSOLE（送受信したコマンドの表示）、アプリのインストール、TX ボタンの LATCH、PTT 方式（通常は CAT (TX1)）、<span class="btn">CWキーイング</span>（2 本目のポート）、ダイヤル分解能、TOT。</dd>
+</dl>
+
+<h2 id="cw">7. CW（受信・送信）</h2>
+<p>モードを CW にすると、画面の下に <b>CW 受信</b>（左）と <b>CW 送信</b>（右）のパネルが出ます。</p>
+
+<h3>受信（解読）</h3>
+<ol>
+  <li><span class="btn">DECODE</span> が点灯していれば、受信音を自動で解読して表示します（最新の 1 文字は緑）。</li>
+  <li><span class="btn">US</span> / <span class="btn">JP</span>: 欧文 / 和文。和文の信号はホレ / ラタで自動でも切り替わります。</li>
+  <li><span class="btn">AUTO</span>: 500〜1000Hz の信号に自動で合わせます。押すごとに 600〜1000Hz の固定に切り替え。FFT スペクトラムのクリックでも合わせる周波数を選べます。</li>
+  <li>表示: WPM（速度）、TONE（合わせている周波数）、Peak（いちばん強い周波数）、LVL（入力レベル）。</li>
+  <li>FFT スペクトラムとオシロスコープ: クリック（FFT はダブルクリック）で横いっぱいに表示。オシロの KEY / ENV / RAW で表示する線を選び、x のスライダーで時間軸を拡大します。</li>
+  <li><span class="btn">コピー</span> で解読した文をクリップボードへ、<span class="btn">クリア</span> で消去。</li>
+</ol>
+
+<h3>送信</h3>
+<p>アプリが 2 本目のポートの DTR（または RTS）線を電鍵のように ON/OFF して送ります（PC KEYING）。準備は <a href="#radio">3 章</a> の PC KEYING と BK-IN、<a href="#connect">4 章</a> の <span class="btn">CWキーイング</span> です。準備ができていないときは、パネルの見出しに <b style="color:var(--tx)">送信不可</b> が出ます（マウスを乗せると理由が出ます）。</p>
+<ol>
+  <li>下の入力欄に送る文を入力し、<span class="btn">SEND</span> か <kbd>Enter</kbd> で送信します（改行は <kbd>Shift</kbd>+<kbd>Enter</kbd>）。</li>
+  <li>送った文字は <span style="color:var(--ok)">緑</span>、送信中の文字は <span style="color:var(--warn)">橙</span> になり、編集できなくなります。その先はまだ編集・追記でき、打ちながら送ることもできます。</li>
+  <li>送信が終わると、その行は上のログ欄に時刻付きで移ります。ログは送信中もリアルタイムに表示されます。</li>
+  <li><span class="btn">STOP</span> ですぐ止めます（途中の文字はログで取り消し線）。</li>
+  <li>速度は上のスライダー（本体の KEY SPEED）。離したときに本体へ送ります。</li>
+  <li><span class="btn">M1</span>〜<span class="btn">M5</span>: クリックで登録した文を送信、<kbd>Shift</kbd>+クリックで入力欄の文を登録。</li>
+</ol>
+<ul>
+  <li><b>カタカナ（和文）</b>も送れます（ひらがな・半角カナも可）。欧文⇔和文が切り替わるところには、ホレ / ラタを自動で入れます。</li>
+  <li>全角の英数字は半角にして送ります。送れない文字（。や漢字など）は送らずに飛ばします。</li>
+  <li>ログには、実際に送った形（半角・カタカナ・ガ → カ゛、自動で入れたホレ / ラタは青）で残ります。</li>
+</ul>
+<div class="warn"><b>注意</b>送信中にウインドウを最小化したりタブを切り替えると、送信を止めます（ブラウザが時間の計測を遅らせ、符号が乱れるため）。ほかのウインドウを前に出すだけなら続きます。</div>
+<div class="note"><b>自分の送信は受信パネルで解読できません</b>PC KEYING で送信している間、FTX-1 は USB の受信音を無音にするため、受信パネルには何も届きません。送った内容は送信パネルのログで確認してください。</div>
+
+<h2 id="ft8">8. FT8 / FT4</h2>
+<p>モードを DATA-U（または DATA-L）にすると FT8 パネルが出ます。<span class="btn">FT8</span> / <span class="btn">FT4</span> ボタンで切り替えます（FT4 は 7.5 秒周期）。</p>
+<div class="warn"><b>時計</b>パソコンの時計が正確（FT8 は ±1 秒、FT4 は ±0.5 秒以内）でないと解読も交信もできません。OS の「時刻を自動的に設定」を ON にしてください。</div>
+<h3>受信</h3>
+<p><span class="btn">DECODE</span> が点灯していれば、周期ごと（FT8 は UTC の :00 / :15 / :30 / :45）に受信音を解読し、一覧に表示します。CQ は緑、自分宛ては赤です。「CQ・自局宛のみ」で絞り込めます。</p>
+<h3>送信</h3>
+<ol>
+  <li>MY CALL と GRID（4 桁のグリッドロケーター）を入力します（保存されます）。</li>
+  <li>呼びたい局の行をクリックすると、DX CALL・レポート・送信周期（相手と逆）が入ります。ダブルクリックならそのまま <span class="btn">TX ON</span>。</li>
+  <li>CQ を出すときは Tx6 を選んで <span class="btn">TX ON</span>。</li>
+  <li><b>AUTO SEQ</b> が ON なら、相手の応答に合わせて Tx1〜Tx6 を自動で進め、73 で終わります。</li>
+  <li><span class="btn">HALT</span> ですぐに送信を止めます。</li>
+  <li>TX Hz は送信する音の高さ、LEVEL は送信音の大きさです。本体の ALC が振れすぎないように LEVEL と本体の USB MOD GAIN を調整します。</li>
+</ol>
+<p>送信は DATA-U のときだけです。同じメッセージを 10 回続けて送ると、自動で TX OFF になります。</p>
+
+<h2 id="setting">9. 本体の設定メニュー</h2>
+<ol>
+  <li><b>FUNC ツマミを押す</b> → ファンクションメニュー左上の <span class="btn">PAGE</span> を 2 回押して 3/3 ページへ → <b>RADIO / CW / OPERATION / DISPLAY / EXTENSION / APRS</b> の SETTING を押すと、本体と同じ設定画面が開きます。</li>
+  <li>左で分類を選び、右の項目をクリックで選択。値はマウスホイールか FUNC ツマミで変更、値のクリックで次の値（<kbd>Shift</kbd>+クリックで前の値）。回し終えると本体へ送ります（回している途中や、元の値に戻したときは送りません）。</li>
+  <li>項目を選ぶと、画面下に <span class="btn">初期値に戻す（値）</span> が出て、その項目だけ工場出荷時の値に戻せます。取扱説明書に初期値が載っていない項目は「初期値 不明」です。</li>
+  <li><span class="btn">BACK</span> で閉じます。</li>
+</ol>
+
+<h2 id="trouble">10. 困ったときは</h2>
+<dl>
+  <dt>POWER を押しても「応答しません」と出る</dt>
+  <dd>もう一方のシリアルポートを選んでください（<kbd>Shift</kbd>+<span class="btn">POWER</span> で一覧を出せます）。WSJT-X などがポートを使っていないかも確認してください。</dd>
+  <dt>CW 送信パネルに「送信不可」が出る</dt>
+  <dd>マウスを乗せると理由が出ます。多いのは「2 本目のポートが開いていない」（SETUP の <span class="btn">CWキーイング</span>）と「本体の PC KEYING が OFF」です。<span class="btn">CWキーイング</span> で選ぶのは、POWER で選んだのとは別のポートです。</dd>
+  <dt>パソコンから受信音が出ない</dt>
+  <dd>左側パネル USB AUDIO RX が <span class="btn">RX停止</span>（再生中）になっているか、MUTE・音量・出力（スピーカー）を確認します。オシロに雑音しか出ず音もしないときは、本体の USB オーディオが止まっていることがあります。本体の電源を入れ直してください。</dd>
+  <dt>FT8 / FT4 が解読されない</dt>
+  <dd>パソコンの時計を確認してください。受信音が出ているか（USB AUDIO RX）、モードが DATA-U か、<span class="btn">DECODE</span> が点灯しているかも確認します。</dd>
+  <dt>新しい版にならない</dt>
+  <dd><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> で読み込み直してください。ローカル版は <code>start.command</code> のターミナルを閉じてから開き直します。今の版は画面右下に表示されます。</dd>
+  <dt>コマンドのやり取りを見たい</dt>
+  <dd>SETUP の「CAT CONSOLE を表示」で、アプリと本体の間のコマンドが見られます。本体が受け付けなかったコマンドは画面下に赤で表示されます。</dd>
+</dl>
+
+<footer>
+  CAT コマンドは八重洲無線「FTX-1 シリーズ CAT オペレーション リファレンスマニュアル」に準拠しています。メーターの換算値は近似値です。
+  CW の解読には <a href="https://github.com/pokibon3/cw_decoder4">CW Decoder 4</a>（GPL）、FT8 / FT4 の解読には <a href="https://github.com/kgoba/ft8_lib">ft8_lib</a>（MIT）を使っています。
+</footer>
+</div>
+<script type="module">
+import { APP_VERSION } from './js/version.js';
+document.getElementById('ver').textContent = `v${APP_VERSION}`;
+</script>
+</body>
+</html>

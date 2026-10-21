@@ -1,8 +1,8 @@
 // Offline app shell. The cache is keyed by APP_VERSION (js/version.js), passed as sw.js?v=...
 const VERSION = 'ftx1-' + (new URL(location.href).searchParams.get('v') || 'dev');
 const FILES = [
-  './', 'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  'js/app.js', 'js/ftx1.js', 'js/serial.js', 'js/audio.js', 'js/knob.js', 'js/scope.js', 'js/ftxmeter.js', 'js/filterdisp.js', 'js/version.js', 'js/digits.js', 'js/exmenu.js', 'js/ft8.js', 'js/ft8/ft8-worker.js', 'js/ft8/ft8-worklet.js', 'js/ft8/ft8core.wasm', 'js/cwdecoder.js', 'js/cwdec/cw-worklet.js', 'js/cwdec/cwcore.wasm',
+  './', 'index.html', 'manual.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
+  'js/app.js', 'js/ftx1.js', 'js/serial.js', 'js/audio.js', 'js/knob.js', 'js/scope.js', 'js/ftxmeter.js', 'js/filterdisp.js', 'js/version.js', 'js/digits.js', 'js/exmenu.js', 'js/exdefaults.js', 'js/ft8.js', 'js/ft8/ft8-worker.js', 'js/ft8/ft8-worklet.js', 'js/ft8/ft8core.wasm', 'js/cwdecoder.js', 'js/cwview.js', 'js/cwsend.js', 'js/cwdec/cw-worklet.js', 'js/cwdec/cwcore.wasm',
 ];
 
 self.addEventListener('install', (e) => {

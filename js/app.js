@@ -10,9 +10,12 @@ import { FtxMeter } from './ftxmeter.js';
 import { FilterDisplay } from './filterdisp.js';
 import { APP_VERSION } from './version.js';
 import { CwDecoder } from './cwdecoder.js';
+import { CwView } from './cwview.js';
+import { CwSender } from './cwsend.js';
 import { Ft8Decoder, ft8Wave } from './ft8.js';
 import { installDigitGlyphs } from './digits.js';
 import { EX_MENUS } from './exmenu.js';
+import { EX_DEFAULTS } from './exdefaults.js';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -49,7 +52,7 @@ function save() { try { localStorage.setItem('ftx1.cfg', JSON.stringify(cfg)); }
 const STEPS = ['auto', 1, 10, 50, 100, 500, 1000, 2500, 5000, 6250, 10000, 12500, 25000];
 const LAYOUTS = ['lr', 'ud', 'single'];
 const ui = {
-  fine: false, fast: false, ptt: false, cwAbort: null, pttLink: null, totTimer: null,
+  fine: false, fast: false, ptt: false, pttLink: null, totTimer: null,
   pop: null, target: null, knMode: ['af', 'af'],
 };
 
@@ -828,17 +831,26 @@ function setupKeyboard() {
 
 // ---------------- connection ----------------
 function onConnected(baud) {
-  $('#btnConnect').classList.remove('busy');
+  $('#btnConnect').classList.remove('connecting');
   if (!audio.rx) startRxAudio({ quiet: true });
   // ID answer: 0840 (CAT manual 2512-D; 0800 in 2508-C)
   const notFtx1 = s.id && !['0800', '0840'].includes(s.id);
   toast(`CAT接続しました（${baud}bps${notFtx1 ? ` / ID ${s.id}: FTX-1ではない可能性` : ''}）`, notFtx1);
+  if (cfg.keyPortAuto) openKeyPortAuto();
 }
 async function toggleConnect(e) {
   if (e?.shiftKey) ui.forcePick = true;
   if (!('serial' in navigator)) { toast('Web Serial 非対応のブラウザです', true); return; }
-  if (radio.connected) { await setPtt(false); await radio.disconnect(); return; }
-  $('#btnConnect').classList.add('busy');
+  if (radio.connected) {
+    // POWER off: the radio's audio and second port go too (they come back by themselves at the next POWER on)
+    await setPtt(false);
+    await radio.disconnect();
+    await audio.stopRx();
+    await audio.stopTx();
+    if (ui.pttLink?.isOpen) { await ui.pttLink.close().catch(() => {}); ui.pttLink = null; $('#pttPortState').textContent = '未接続（POWER ON で自動接続）'; }
+    return;
+  }
+  $('#btnConnect').classList.add('connecting');
   // POWER: reconnect to the port used last time (already granted, same USB IDs, same position) without the picker;
   // Shift+click, or no answer from the remembered port, opens the picker
   if (!ui.forcePick) {
@@ -859,7 +871,7 @@ async function toggleConnect(e) {
   let port;
   try {
     port = await navigator.serial.requestPort();
-  } catch { $('#btnConnect').classList.remove('busy'); return; } // picker cancelled
+  } catch { $('#btnConnect').classList.remove('connecting'); return; } // picker cancelled
   try {
     const baud = await radio.connect(port, cfg.catBaud);
     const info = port.getInfo();
@@ -877,7 +889,7 @@ async function toggleConnect(e) {
       toast(`ポートを開けません: ${e.message}（他のアプリが使用中の可能性）`, true);
     }
   } finally {
-    $('#btnConnect').classList.remove('busy');
+    $('#btnConnect').classList.remove('connecting');
   }
 }
 radio.addEventListener('connection', () => {
@@ -886,23 +898,60 @@ radio.addEventListener('connection', () => {
   render();
 });
 
+// The radio's second serial port (Standard COM Port / CAT-2): CW keying and RTS/DTR PTT. Once opened, it is opened
+// again by itself whenever CAT connects (the FTX-1 has two ports: the one of the same device that is not the CAT port);
+// closing it by hand stops that.
+async function openKeyPort(port) {
+  const link = new SerialLink();
+  await link.open(port, 38400, { framed: false });
+  await link.setSignals({ requestToSend: false, dataTerminalReady: false });
+  link.addEventListener('close', () => { $('#pttPortState').textContent = '切断'; });
+  ui.pttLink = link;
+  $('#pttPortState').textContent = '2 本目のポート接続中（CW キーイング・RTS/DTR の PTT）';
+}
+// the radio's other port, among those Chrome already allows (same USB IDs as the CAT port, not the CAT port)
+async function otherPorts() {
+  const cat = radio.link?.port;
+  if (!cat) return [];
+  const ci = cat.getInfo();
+  return (await navigator.serial.getPorts()).filter((p) => {
+    const i = p.getInfo();
+    return p !== cat && i.usbVendorId === ci.usbVendorId && i.usbProductId === ci.usbProductId;
+  });
+}
+async function openKeyPortAuto() {
+  if (ui.pttLink?.isOpen || !radio.link?.port) return false;
+  try {
+    for (const p of await otherPorts()) {
+      try { await openKeyPort(p); return true; } catch {}
+    }
+  } catch {}
+  return false;
+}
+// 「CWキーイング」: close it, or open the radio's other port: without the picker when Chrome already allows it; in the
+// picker, choosing the CAT port is caught (the picker needs a click, so the user presses the button again)
 async function togglePttPort() {
   if (ui.pttLink?.isOpen) {
     await ui.pttLink.close();
     ui.pttLink = null;
+    cfg.keyPortAuto = false; save();
     $('#pttPortState').textContent = '未接続（CATポートを使用）';
     return;
   }
+  if (await openKeyPortAuto()) { cfg.keyPortAuto = true; save(); return; }
+  let port;
   try {
-    const port = await navigator.serial.requestPort();
-    const link = new SerialLink();
-    await link.open(port, 38400, { framed: false });
-    await link.setSignals({ requestToSend: false, dataTerminalReady: false });
-    link.addEventListener('close', () => { $('#pttPortState').textContent = '切断'; });
-    ui.pttLink = link;
-    $('#pttPortState').textContent = 'PTTポート接続中（RTS/DTR用）';
+    port = await navigator.serial.requestPort();
+  } catch { return; } // picker cancelled
+  if (port === radio.link?.port) {
+    toast('選んだのは POWER（CAT）で使用中のポートです。もう一度「CWキーイング」を押して、もう一方を選んでください', true, 7000);
+    return;
+  }
+  try {
+    await openKeyPort(port);
+    cfg.keyPortAuto = true; save();
   } catch (e) {
-    if (e.name !== 'NotFoundError') toast(`PTTポートを開けません: ${e.message}`, true);
+    toast(`2 本目のポートを開けません: ${e.message}`, true);
   }
 }
 
@@ -940,38 +989,75 @@ function setupConsole() {
 
 // ---------------- CW ----------------
 function setupCw() {
-  const send = async (text) => {
-    if (!radio.connected) { toast('CATが接続されていません', true); return; }
-    if (!text.trim()) return;
-    if (!isCW(s.mode[s.ft])) toast('CWモードではありません（送信されない場合があります）');
-    ui.cwAbort?.abort();
-    const ac = new AbortController();
-    ui.cwAbort = ac;
-    $('#btnCwSend').classList.add('on');
-    await radio.sendCW(text, ac.signal);
-    if (ui.cwAbort === ac) { ui.cwAbort = null; $('#btnCwSend').classList.remove('on'); }
+  // editor: sent text stays, locked and coloured, the rest is editable while sending; finished lines go to the log
+  const editor = $('#cwText');
+  // keying: PC KEYING (EX020114: 1 RTS / 2 DTR) on the radio's second port (SETUP「CWキーイング」); null = ready,
+  // otherwise why it cannot key
+  const keyProblem = () => {
+    const v = s.ex['020114'], line = v === '2' ? 'dtr' : v === '1' ? 'rts' : null;
+    if (!radio.connected) return 'CAT が接続されていません';
+    if (!ui.pttLink?.isOpen) return 'SETUP の「CWキーイング」で 2 本目のポート（Standard COM Port）を開いてください';
+    if (v == null) return '本体の PC KEYING を読み込み中です（少し待ってからもう一度）';
+    if (!line) return '本体の PC KEYING（CW SETTING → MODE CW）を DTR か RTS にしてください';
+    if (cfg.pttMethod === line) return `${line.toUpperCase()} は PTT に使っているのでキーイングに使えません（SETUP の PTT 方式を CAT に）`;
+    return null;
   };
-  $('#btnCwSend').addEventListener('click', () => send($('#cwText').value));
-  $('#btnCwStop').addEventListener('click', () => {
-    ui.cwAbort?.abort();
-    ui.cwAbort = null;
-    $('#btnCwSend').classList.remove('on');
-    radio.stopCW();
-  });
+  const keyer = () => {
+    if (keyProblem()) return null;
+    const sig = s.ex['020114'] === '2' ? 'dataTerminalReady' : 'requestToSend', link = ui.pttLink;
+    return (on) => link.setSignals({ [sig]: on });
+  };
+  const cw = new CwSender(radio, { editor, back: $('#cwBack'), log: $('#cwLog') }, keyer);
+  // PC KEYING: read on connecting and again on each start
+  const readCwSettings = () => radio.send('EX020114;', { read: true });
+  radio.addEventListener('connection', () => { if (radio.connected) setTimeout(readCwSettings, 2000); });
+  setInterval(() => {
+    // shown only when it cannot send (hover for the reason)
+    const why = keyProblem();
+    $('#cwHow').hidden = !why;
+    $('#cwHow').title = why || '';
+  }, 500);
+  cw.addEventListener('error', (e) => toast(`CW キーイング失敗: ${e.detail.message}`, true));
+  // timers are throttled in a hidden window, which would garble the keying
+  document.addEventListener('visibilitychange', () => { if (document.hidden && cw.active) { cw.stop(); toast('ウインドウが隠れたので CW 送信を止めました', true); } });
+  const start = () => {
+    if (!editor.value.trim()) return;
+    if (!cw.active) readCwSettings();
+    const why = keyProblem();
+    if (why) { toast(`CW を送信できません: ${why}`, true, 6000); return; }
+    if (!isCW(s.mode[s.ft])) toast('CWモードではありません（送信されない場合があります）');
+    cw.start();
+  };
+  cw.addEventListener('state', () => $('#btnCwSend').classList.toggle('on', cw.active));
+  // key speed slider: the radio's KEY SPEED (the keying follows it)
+  const sp = $('#cwSpeed');
+  sp.addEventListener('pointerdown', () => { ui.cwSpeedDrag = true; });
+  addEventListener('pointerup', () => { ui.cwSpeedDrag = false; });
+  // the number follows the drag; the radio gets the value once, on release (fewer writes to it)
+  sp.addEventListener('input', () => { $('#cwWpm').textContent = sp.value; });
+  sp.addEventListener('change', () => radio.setKeySpeed(+sp.value));
+  $('#btnCwSend').addEventListener('click', start);
+  $('#btnCwStop').addEventListener('click', () => cw.stop());
+  // Enter sends; Shift+Enter is a new line
+  editor.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); start(); } });
   const mem = $('#cwMem'); // shares the key row with SEND / STOP
   cfg.cwMem.forEach((txt, i) => {
     const b = document.createElement('button');
     b.className = 'btn';
     b.textContent = `M${i + 1}`;
-    const upd = () => { b.classList.toggle('has', !!cfg.cwMem[i]); b.title = cfg.cwMem[i] || '(空)'; };
+    const upd = () => { b.classList.toggle('has', !!cfg.cwMem[i]); b.title = `${cfg.cwMem[i] || '(空)'}\nクリックで送信 / Shift+クリックで入力欄の文を登録`; };
     upd();
     b.addEventListener('click', (e) => {
       if (e.shiftKey) {
-        cfg.cwMem[i] = $('#cwText').value.toUpperCase();
+        cfg.cwMem[i] = editor.value.toUpperCase();
         save();
         upd();
         toast(`M${i + 1} に登録しました`);
-      } else if (cfg.cwMem[i]) send(cfg.cwMem[i]);
+      } else if (cfg.cwMem[i]) {
+        // queued after what is already waiting in the editor
+        editor.value = editor.value && !/\s$/.test(editor.value) ? `${editor.value} ${cfg.cwMem[i]}` : editor.value + cfg.cwMem[i];
+        start();
+      }
     });
     mem.appendChild(b);
   });
@@ -1136,7 +1222,14 @@ function setupSettings() {
 function setupDecoder() {
   const dec = new CwDecoder();
   dec.channel = cfg.decCh;
-  const textEl = $('#decText');
+  // display and controls as cw_decoder4's web page
+  new CwView(dec, {
+    panel: $('#panelDec'), text: $('#decText'), fft: $('#decFft'), scope: $('#decScope'),
+    fftCard: $('#decFftCard'), scopeCard: $('#decScopeCard'), fftCap: $('#decFftCap'), scopeCap: $('#decScopeCap'),
+    scopeSpan: $('#decScopeSpan'), zoom: $('#decZoom'), zoomV: $('#decZoomV'), bKey: $('#decKey'), bEnv: $('#decEnv'), bRaw: $('#decRaw'),
+    mode: $('#btnDecMode'), tone: $('#btnDecTone'), wpm: $('#decWpm'), toneHz: $('#decTone'), peakHz: $('#decPeak'),
+    lvlBar: $('#decLvlBar'), lvlTx: $('#decLvl'), clip: $('#decClip'), inRate: $('#decRate'), copy: $('#btnDecCopy'), clear: $('#btnDecClr'),
+  });
   // follow RX audio: the decoder lives in the RX AudioContext, so re-attach whenever RX restarts
   let pending = null;
   const sync = async () => {
@@ -1151,11 +1244,6 @@ function setupDecoder() {
     if (pending === rx.ctx) pending = null;
   };
   audio.addEventListener('state', sync);
-  dec.addEventListener('text', () => {
-    const atBottom = textEl.scrollHeight - textEl.scrollTop - textEl.clientHeight < 30;
-    textEl.textContent = dec.text;
-    if (atBottom) textEl.scrollTop = textEl.scrollHeight;
-  });
 
   $('#btnDec').addEventListener('click', () => {
     cfg.dec = !cfg.dec;
@@ -1164,9 +1252,6 @@ function setupDecoder() {
     if (cfg.dec && !audio.rx) startRxAudio();
     sync();
   });
-  $('#btnDecMode').addEventListener('click', () => dec.toggleMode());
-  $('#btnDecTone').addEventListener('click', () => dec.cycleTone());
-  $('#btnDecClr').addEventListener('click', () => dec.clear());
   $('#decCh').value = cfg.decCh;
   $('#decCh').addEventListener('change', (e) => { cfg.decCh = e.target.value; dec.setChannel(cfg.decCh); save(); });
   const gainLabel = () => { $('#decGainV').textContent = `${cfg.decGain > 0 ? '+' : ''}${cfg.decGain} dB`; };
@@ -1174,17 +1259,7 @@ function setupDecoder() {
   gainLabel();
   $('#decGain').addEventListener('input', (e) => { cfg.decGain = +e.target.value; dec.setGain(cfg.decGain); gainLabel(); save(); });
 
-  // status labels change at frame rate; only touch the DOM when they differ
-  let last = '';
-  setInterval(() => {
-    const key = [dec.active, dec.jp, dec.toneAuto, dec.toneHz, dec.wpm, dec.gate].join();
-    if (key === last) return;
-    last = key;
-    $('#btnDecMode').textContent = dec.jp ? 'JP' : 'US';
-    $('#btnDecTone').textContent = dec.toneAuto || !dec.toneHz ? 'AUTO' : `${dec.toneHz}Hz`;
-    $('#decInfo').textContent = dec.active ? `${dec.wpm || '--'} WPM · ${dec.toneHz || '---'}Hz` : 'OFF';
-    $('#decLed').classList.toggle('on', dec.active && dec.gate);
-  }, 100);
+  setInterval(() => $('#decLed').classList.toggle('on', dec.active && dec.gate), 100);
   $('#btnDec').classList.toggle('on', cfg.dec);
 }
 
@@ -1217,10 +1292,25 @@ function exStep(it, raw, n) {
   }
   return clamp((Number.isFinite(v) ? v : it.lo) + n * it.st, it.lo, it.hi);
 }
+// turning (wheel / FUNC knob) shows each step at once; the radio gets the final value once turning has stopped for a
+// moment (fewer writes to it)
+let exTimer = null, exPending = null;
+function exFlush() {
+  clearTimeout(exTimer);
+  // (turned back to where it started: nothing to send)
+  if (exPending && exPending.v !== exPending.from) radio.setEx(exPending.key, exPending.v);
+  exPending = null;
+}
 function exAdjust(n) {
   const { it, key } = exSel;
   if (it.t !== 'opt' && it.t !== 'num') return;
-  radio.setEx(key, exEncode(it, exStep(it, s.ex[key], n)));
+  if (exPending && exPending.key !== key) exFlush(); // another item: the previous one goes now
+  const from = exPending ? exPending.from : s.ex[key];
+  const v = exEncode(it, exStep(it, s.ex[key], n));
+  s.ex[key] = v;
+  exPending = { key, v, from };
+  clearTimeout(exTimer);
+  exTimer = setTimeout(exFlush, 400);
   drawSettings();
 }
 function openSettings(i) {
@@ -1258,7 +1348,7 @@ function openExGroup(g) {
       if (!pick()) return;
       if (it.t === 'text') {
         const t = prompt(`${it.name}（最大 ${it.n} 文字）`, (s.ex[key] || '').trim());
-        if (t != null) radio.setEx(key, t.slice(0, it.n));
+        if (t != null && t.slice(0, it.n) !== (s.ex[key] || '').trim()) radio.setEx(key, t.slice(0, it.n));
       } else exAdjust(e.shiftKey ? -1 : 1);
     });
     row.addEventListener('wheel', (e) => { e.preventDefault(); if (pick()) exAdjust(e.deltaY < 0 ? 1 : -1); }, { passive: false });
@@ -1274,6 +1364,12 @@ function drawSettings() {
     setText(row.lastChild, radio.connected ? exText(it, s.ex[row.dataset.key]) : '—');
     row.classList.toggle('sel', exSel?.key === row.dataset.key);
   }
+  // reset the selected item to its factory default (only items whose default the manuals print)
+  const def = exSel && EX_DEFAULTS[exSel.key];
+  const b = $('#exmDef');
+  b.hidden = !exSel;
+  b.disabled = def == null || !radio.connected || s.ex[exSel?.key] === def;
+  setText(b, def == null ? '初期値 不明' : `初期値に戻す（${exText(exSel.it, def)}）`);
 }
 
 // ---------------- side panel VFO keys (app functions not on the radio's FUNC pages) ----------------
@@ -1621,7 +1717,9 @@ function draw() {
   const conn = radio.connected;
   $('#btnConnect').classList.toggle('on', conn);
   const lcd = $('#lcd');
-  const lcdCls = `lcd lay-${cfg.layout}${cfg.layout === 'single' && s.vs === 1 ? ' only-sub' : ''}${conn ? '' : ' off'}`;
+  // dark while POWER is off; connected but before the radio has sent its frequency, the keys show and the values stay
+  // blank (not the placeholders such as 14.200)
+  const lcdCls = `lcd lay-${cfg.layout}${cfg.layout === 'single' && s.vs === 1 ? ' only-sub' : ''}${conn ? (s.synced ? '' : ' nosync') : ' off'}`;
   if (lcd.className !== lcdCls) { lcd.className = lcdCls; requestAnimationFrame(fitFreq); }
 
   const st = statusHtml();
@@ -1686,7 +1784,8 @@ function draw() {
   $('#panelCw').hidden = !cw;
   $('#panelDec').hidden = !cw;
   $('#panelFt8').hidden = !['C', '8'].includes(s.mode[V()]);
-  $('#cwWpm').textContent = `${s.ks} WPM`;
+  $('#cwWpm').textContent = s.ks;
+  if (!ui.cwSpeedDrag) $('#cwSpeed').value = s.ks;
   $('#catErr').textContent = `ERR ${s.errors}`;
   $('#catErr').classList.toggle('err', s.errors > 0);
   // the radio's scope settings line (e.g. "CENTER FAST2 SPAN 100kHz")
@@ -1719,6 +1818,12 @@ setupSettings();
 setupSidebar();
 setupVfoKeys();
 $('#exmBack').addEventListener('click', closeSettings);
+$('#exmDef').addEventListener('click', () => {
+  const def = exSel && EX_DEFAULTS[exSel.key];
+  if (def == null) return;
+  radio.setEx(exSel.key, def);
+  drawSettings();
+});
 setupDecoder();
 setupFt8();
 render();
@@ -1774,4 +1879,4 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 // debug handle for the DevTools console, e.g. ftx.s.smeter[0] = 160
-window.ftx = { radio, s, audio, cfg };
+window.ftx = { radio, s, audio, cfg, ui };

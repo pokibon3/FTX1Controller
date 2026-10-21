@@ -10,3 +10,7 @@ and is distributed under the GPL. The corresponding source (`src/dsp.cpp`, `src/
 that repository.
 
 To update: rebuild there with `sh web/build.sh`, then copy both files here.
+
+`js/cwview.js` (the CW RX panel's status row, FFT spectrum and oscilloscope, and their controls) is ported from the
+same repository's `web/app.js` (`drawFFT`, `drawScope`, `drawStatus`, `renderText` and the control handlers), so it
+falls under the same licence.

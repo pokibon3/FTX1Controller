@@ -87,7 +87,7 @@
           </select>
         </div>
         <div class="row">
-          <button class="btn" id="btnPttPort">PTTポート選択</button>
+          <button class="btn" id="btnPttPort" title="本体の 2 本目のシリアルポート（POWER で選んだのとは別のポート。Windows では Standard COM Port）を開く。CW の直接キーイングと、RTS/DTR 方式の PTT に使う">CWキーイング</button>
           <span class="hint" id="pttPortState">未接続（CATポートを使用）</span>
         </div>
         <div class="field"><label>ダイヤル分解能</label>
@@ -109,7 +109,6 @@
   <main class="radio" id="radio">
     <!-- top edge keys (long flat keys with the legend printed below, as on the field head) -->
     <div class="top-edge">
-      <button class="tkey-cat tkey-menu" id="btnMenu" title="USB AUDIO / CW DECODER / SETUP パネルの表示切替" aria-label="メニュー">&#9776;</button>
       <button class="tkey-cat" id="btnConnect" title="電源（CAT ポートに接続 / 切断）"><span class="tled"></span>POWER</button>
       <!-- top edge as on the radio: five flat keys with legends below + the orange model print, then three keys -->
       <div class="te-main">
@@ -130,8 +129,9 @@
     </div>
 
     <div class="head">
-      <!-- left: SUB DIAL / TX / SUB AF-RF-SQL -->
+      <!-- left: (menu) / SUB DIAL / TX / SUB AF-RF-SQL -->
       <section class="h-left">
+        <button class="tkey-cat tkey-menu" id="btnMenu" title="USB AUDIO / CW DECODER / SETUP パネルの表示切替" aria-label="メニュー">&#9776;</button>
         <div class="kw">
           <label>SUB DIAL</label>
           <div class="knob knob-r" id="knSubDial" title="SUB側の周波数 / クリックでMAIN⇔SUB入替"><div class="cap"><i></i></div></div>
@@ -183,7 +183,7 @@
           <div class="exm" id="exm" hidden>
             <div class="exm-title" id="exmTitle"></div>
             <div class="exm-body"><div class="exm-groups" id="exmGroups"></div><div class="exm-items" id="exmItems"></div></div>
-            <div class="exm-foot"><button class="exm-back" id="exmBack">BACK</button><span class="exm-hint" id="exmHint">項目を選んで FUNC ツマミ / ホイールで変更、値のクリックで次の値</span></div>
+            <div class="exm-foot"><button class="exm-back" id="exmBack">BACK</button><button class="exm-back exm-def" id="exmDef" hidden>初期値に戻す</button><span class="exm-hint" id="exmHint">項目を選んで FUNC ツマミ / ホイールで変更、値のクリックで次の値。「初期値に戻す」で選んだ項目だけ工場出荷時の値に戻ります</span></div>
           </div>
 
           <div class="lcd-popup" id="popup" hidden>
@@ -225,27 +225,54 @@
 
   <!-- ===== PC side deck ===== -->
   <section class="deck">
-    <!-- CW TX / RX: same skeleton (header, text box, 7-column key row, hint) so both line up -->
-    <div class="panel cwp" id="panelCw">
-      <h2>CW <span class="tag tag-tx">TX</span><span class="h2-sp"></span><span class="tag" id="cwWpm">20 WPM</span></h2>
-      <textarea class="cw-box" id="cwText" placeholder="CQ CQ DE JA1XXX K" spellcheck="false"></textarea>
-      <div class="cw-keys" id="cwMem">
-        <button class="btn" id="btnCwSend">SEND</button>
-        <button class="btn" id="btnCwStop">STOP</button>
-      </div>
-      <p class="hint">M1–M5: クリックで送信 / Shift+クリックで現在の文を登録。BK-IN ON で送出されます。</p>
-    </div>
-
+    <!-- CW RX (left) / TX (right). RX shows what cw_decoder4's web page shows, with the same controls -->
     <div class="panel cwp" id="panelDec">
-      <h2>CW <span class="tag">RX</span><span class="dec-led" id="decLed" title="キー判定"></span><span class="h2-sp"></span><span class="tag" id="decInfo">-- WPM</span></h2>
-      <div class="cw-box dec-text" id="decText"></div>
-      <div class="cw-keys">
-        <button class="btn" id="btnDec" title="RX音声をデコード（USB AUDIO RX 開始中に動作）">DECODE</button>
+      <h2>CW <span class="tag">RX</span><span class="dec-led" id="decLed" title="キー判定"></span><span class="h2-sp"></span>
+        <button class="btn" id="btnDec" title="RX音声をデコード（USB AUDIO RX 開始中に動作）">DECODE</button></h2>
+      <div class="cwd-status">
         <button class="btn" id="btnDecMode" title="欧文 / 和文">US</button>
         <button class="btn" id="btnDecTone" title="トーン: AUTO → 600〜1000Hz 手動">AUTO</button>
-        <button class="btn" id="btnDecClr">CLR</button>
+        <span class="cwd-sep"></span>
+        <span class="cwd-m"><b id="decWpm">--</b> WPM</span>
+        <span class="cwd-m hz">TONE <b id="decTone">---</b> Hz</span>
+        <span class="cwd-m pk">Peak <b id="decPeak">----</b></span>
+        <span class="cwd-sep"></span>
+        <span class="cwd-lvl"><i>LVL</i><span class="cwd-bar"><b id="decLvlBar"></b><s></s></span><span id="decLvl">-inf dBFS</span><span class="cwd-clip" id="decClip">CLIP</span><span class="cwd-rate" id="decRate"></span></span>
+        <span class="h2-sp"></span>
+        <button class="btn" id="btnDecCopy">コピー</button>
+        <button class="btn" id="btnDecClr">クリア</button>
       </div>
-      <p class="hint">US/JP: 欧文・和文 / AUTO: 500〜1000Hz に自動同調（押すごとに 600〜1000Hz 手動）。</p>
+      <pre class="dec-text" id="decText"></pre>
+      <div class="cwd-panels">
+        <div class="cwd-card" id="decFftCard">
+          <div class="cwd-cap" id="decFftCap" title="グラフのクリックでトーン選択・ダブルクリックで全幅 / ここをクリックで全幅"><span>FFT スペクトラム</span></div>
+          <canvas id="decFft"></canvas>
+        </div>
+        <div class="cwd-card" id="decScopeCard">
+          <div class="cwd-cap" id="decScopeCap" title="クリックで全幅表示 / もう一度で元に戻す"><span>オシロスコープ</span><span class="grow" id="decScopeSpan"></span>
+            <label title="時間軸の倍率">x<input type="range" id="decZoom" min="1" max="3" step="0.5" value="2"><span id="decZoomV">2.0</span></label>
+            <button class="btn trace on" id="decKey">KEY</button><button class="btn trace on" id="decEnv">ENV</button><button class="btn trace on" id="decRaw">RAW</button></div>
+          <canvas id="decScope" title="クリックで全幅表示 / もう一度で元に戻す"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel cwp" id="panelCw">
+      <h2>CW <span class="tag tag-tx">TX</span><span class="h2-sp"></span><span class="tag err" id="cwHow">送信不可</span></h2>
+      <div class="cw-ctl">
+      <div class="cw-keys" id="cwMem">
+        <button class="btn" id="btnCwSend" title="入力欄の文を送信（Enter でも可）。送信済みは色が変わって編集不可、その先は送信中も編集・追記できます">SEND</button>
+        <button class="btn" id="btnCwStop">STOP</button>
+      </div>
+      <!-- key speed (the radio's KEY SPEED, KS) -->
+      <div class="cw-speed"><span class="cwd-m"><b id="cwWpm">20</b> WPM</span><input type="range" id="cwSpeed" min="4" max="60" step="1" value="20" title="送信速度（本体の KEY SPEED）"></div>
+      </div>
+      <div class="cw-log" id="cwLog" title="送信ログ（送信済みの文字は明るく、本体に渡して送信待ちの文字は暗く表示）"></div>
+      <!-- the editor's text is drawn by the backdrop (sent / handed over / editable colours); the textarea on top is transparent -->
+      <div class="cw-edit-wrap">
+        <div class="cw-back" id="cwBack" aria-hidden="true"></div>
+        <textarea class="cw-box" id="cwText" placeholder="CQ CQ DE JA1XXX K" spellcheck="false" title="送信する文。送信済み（色付き）は編集できず、その先は送信中も編集できます"></textarea>
+      </div>
     </div>
 
     <!-- FT8 / FT4 receive / transmit: shown in DATA-U / DATA-L -->
@@ -322,6 +349,7 @@
     <span class="sb-msg" id="sbMsg"></span>
     <span class="sb-sp"></span>
     <span class="sb-item" id="sbClock"></span>
+    <a class="sb-item sb-help" href="manual.html" target="_blank" rel="noopener" title="使い方（マニュアル）を開く">使い方</a>
     <span class="sb-item sb-ver" id="sbVer"></span>
   </footer>
 
