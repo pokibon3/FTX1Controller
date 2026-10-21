@@ -230,6 +230,8 @@ footer { margin-top: 48px; color: var(--dim); font-size: 13px; border-top: 1px s
   <dd>もう一方のシリアルポートを選んでください（<kbd>Shift</kbd>+<span class="btn">POWER</span> で一覧を出せます）。WSJT-X などがポートを使っていないかも確認してください。</dd>
   <dt>CW 送信パネルに「送信不可」が出る</dt>
   <dd>マウスを乗せると理由が出ます。多いのは「2 本目のポートが開いていない」（SETUP の <span class="btn">CWキーイング</span>）と「本体の PC KEYING が OFF」です。<span class="btn">CWキーイング</span> で選ぶのは、POWER で選んだのとは別のポートです。</dd>
+  <dt>本体を再起動したらポートが入れ替わった</dt>
+  <dd>本体の電源を入れ直すと、POWER と CWキーイング のポートが入れ替わってつながることがあります。キーイングは両方のポートの DTR（RTS）を動かすので、入れ替わっていても送信できます。USB が切れて戻ったときは、2 本目のポートも自動でつなぎ直します。</dd>
   <dt>パソコンから受信音が出ない</dt>
   <dd>左側パネル USB AUDIO RX が <span class="btn">RX停止</span>（再生中）になっているか、MUTE・音量・出力（スピーカー）を確認します。オシロに雑音しか出ず音もしないときは、本体の USB オーディオが止まっていることがあります。本体の電源を入れ直してください。</dd>
   <dt>FT8 / FT4 が解読されない</dt>

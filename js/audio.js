@@ -131,6 +131,8 @@ export class AudioEngine extends EventTarget {
     if (ctx.state === 'suspended') await ctx.resume();
     this._txGain = gain;
     this.tx = { ctx, stream, micGain, analyser, gate, toneGain, osc, tone: false };
+    // the microphone can be cut off from outside (e.g. the device switched in System Settings): tell the app
+    stream.getAudioTracks()[0]?.addEventListener('ended', () => { if (this.tx?.stream === stream) this.dispatchEvent(new Event('txended')); });
     this.dispatchEvent(new Event('state'));
   }
 

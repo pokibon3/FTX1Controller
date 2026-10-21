@@ -919,6 +919,11 @@ async function otherPorts() {
     return p !== cat && i.usbVendorId === ci.usbVendorId && i.usbProductId === ci.usbProductId;
   });
 }
+// USB unplugged / radio restarted: the second port is gone; it is opened again when the radio's ports come back
+navigator.serial?.addEventListener('disconnect', (e) => {
+  if (ui.pttLink && e.target === ui.pttLink.port) { ui.pttLink = null; $('#pttPortState').textContent = '切断（USB が戻ると自動で接続）'; }
+});
+navigator.serial?.addEventListener('connect', () => { if (cfg.keyPortAuto && radio.connected) setTimeout(openKeyPortAuto, 1000); });
 async function openKeyPortAuto() {
   if (ui.pttLink?.isOpen || !radio.link?.port) return false;
   try {
@@ -1002,10 +1007,15 @@ function setupCw() {
     if (cfg.pttMethod === line) return `${line.toUpperCase()} は PTT に使っているのでキーイングに使えません（SETUP の PTT 方式を CAT に）`;
     return null;
   };
+  // the line is driven on both of the radio's ports: PC KEYING works on the Standard port (CAT-2), and Chrome cannot tell
+  // which of the two that is (after the radio restarts, CAT may well be on it); the line is unused on the other port
   const keyer = () => {
     if (keyProblem()) return null;
-    const sig = s.ex['020114'] === '2' ? 'dataTerminalReady' : 'requestToSend', link = ui.pttLink;
-    return (on) => link.setSignals({ [sig]: on });
+    const sig = s.ex['020114'] === '2' ? 'dataTerminalReady' : 'requestToSend', links = [ui.pttLink, radio.link];
+    return async (on) => {
+      const r = await Promise.allSettled(links.map((l) => l.setSignals({ [sig]: on })));
+      if (r.every((x) => x.status === 'rejected')) throw r[0].reason;
+    };
   };
   const cw = new CwSender(radio, { editor, back: $('#cwBack'), log: $('#cwLog') }, keyer);
   // PC KEYING: read on connecting and again on each start
@@ -1149,6 +1159,20 @@ function setupAudio() {
   $('#txGain').addEventListener('input', (e) => { cfg.txGain = +e.target.value; audio.setTxGain(cfg.txGain); save(); });
   $('#txGate').addEventListener('change', (e) => { cfg.txGate = e.target.checked; audio.setTxOpen(!cfg.txGate || ui.ptt); save(); });
   $('#txTone').addEventListener('change', (e) => audio.setTone(e.target.checked));
+  // the microphone was cut off: open it again (keeping the 1 kHz tone if it was on); give up with a message if it fails
+  let reopening = false;
+  audio.addEventListener('txended', async () => {
+    if (reopening) return;
+    reopening = true;
+    const tone = $('#txTone').checked;
+    await audio.stopTx();
+    await new Promise((r) => setTimeout(r, 500));
+    if (await startTxAudio()) {
+      if (tone) { $('#txTone').checked = true; audio.setTone(true); }
+      toast('マイクが切れたので開き直しました');
+    } else toast('マイクが切れました。開き直せないので TX音声を止めました', true);
+    reopening = false;
+  });
 
   audio.addEventListener('state', () => {
     $('#btnRx').textContent = audio.rx ? 'RX停止' : 'RX開始';
