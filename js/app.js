@@ -1820,12 +1820,13 @@ function draw() {
   }
 
   $('#btnPtt').classList.toggle('on', s.tx || ui.ptt);
-  // PC playback follows the radio's squelch: MAIN from RI (SQL open / closed, sent by the radio as it changes),
-  // SUB estimated from its S meter against SQL (as the SUB BUSY lamp); SQL at 0 is always open
+  // PC playback follows the radio's squelch, in the FM modes only (where the knob is SQL, as RF/SQL VR = AUTO; elsewhere
+  // it is RF and SQL could not be turned down): MAIN from RI (SQL open / closed, sent by the radio as it changes), SUB
+  // estimated from its S meter against SQL (as the SUB BUSY lamp); SQL at 0 is always open
   {
-    const on = cfg.pcSql && conn && !s.tx;
-    const mainOpen = !on || s.sql[0] === 0 || (s.ri ? s.ri.busy : true);
-    const subOpen = !on || s.sql[1] === 0 || s.smeter[1] > Math.max(12, s.sql[1] / 2);
+    const on = (v) => cfg.pcSql && conn && !s.tx && isFM(s.mode[v]) && s.sql[v] > 0;
+    const mainOpen = !on(0) || (s.ri ? s.ri.busy : true);
+    const subOpen = !on(1) || s.smeter[1] > Math.max(12, s.sql[1] / 2);
     audio.setRxSquelch(mainOpen, subOpen);
   }
   // CW TX / RX panels only while the operated VFO is in CW

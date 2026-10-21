@@ -4,7 +4,7 @@ Yaesu FTX-1 を Chrome から操作する CAT / USB オーディオ コントロ
 FTX-1 のフロントパネル（MAIN/SUB 2バンド表示、AF-FFT、FUNC ノブ、メインダイヤル）を模した UI です。
 
 - **CAT**: Web Serial API（ボーレート自動検出, 8N1）
-- **USB オーディオ**: FTX-1 内蔵「USB Audio CODEC」の受信音をPCで再生（AF-FFT/ウォーターフォール表示・録音）、PCマイクからFTX-1へ送信音声。USB の受信音には本体のスケルチがかからないため、「本体のスケルチに連動」（既定 ON）で、スケルチが閉じている間は PC の再生音を消す（MAIN = L は本体の BUSY（`RI`）、SUB = R は S メーターと SQL から推定）
+- **USB オーディオ**: FTX-1 内蔵「USB Audio CODEC」の受信音をPCで再生（AF-FFT/ウォーターフォール表示・録音）、PCマイクからFTX-1へ送信音声。USB の受信音には本体のスケルチがかからないため、「本体のスケルチに連動」（既定 ON）で、FM 系のモードではスケルチが閉じている間 PC の再生音を消す（MAIN = L は本体の BUSY（`RI`）、SUB = R は S メーターと SQL から推定。FM 以外はツマミが RF になるので連動しない）
 - **PWA**: Chrome でインストールするとアプリとして独立ウィンドウ起動・オフライン動作
   （旧「Chrome アプリ」は Google により廃止済みのため、後継の PWA 方式で実装）
 
