@@ -35,7 +35,7 @@ const DEFAULTS = {
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'lr', layoutV2: true,
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
-  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, ft8Mode: 'FT8', dec: true, decCh: 'L', decGain: 0, console: false,
+  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, ft8Mode: 'FT8', pcSql: true, dec: true, decCh: 'L', decGain: 0, console: false,
 };
 const cfg = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
@@ -630,7 +630,12 @@ function setupKnobs() {
         popup(`${kind.toUpperCase()} ${kind === 'af' ? 'GAIN ' : kind === 'rf' ? 'GAIN ' : ''}${side(v)}`, pct255(nv), nv / 255);
       },
       // press switches the knob between AF and RF (SSB/CW/DATA) or SQL (AM/FM)
-      onPress: () => { ui.knMode[v] = ui.knMode[v] === 'af' ? 'alt' : 'af'; render(); },
+      onPress: () => {
+        ui.knMode[v] = ui.knMode[v] === 'af' ? 'alt' : 'af';
+        const kind = knobMode(v), val = kind === 'af' ? s.af[v] : kind === 'rf' ? s.rf[v] : s.sql[v];
+        popup(`${kind.toUpperCase()} ${side(v)}`, pct255(val), val / 255);
+        render();
+      },
     });
     afKnobs.push({ k, v });
   }
@@ -656,13 +661,18 @@ function setupKnobs() {
 }
 
 // default dial steps per mode (FTX-1 manual p.11): normal / [FINE] / (FAST)
-function modeStep(mode) {
-  if (['1', '2', '3', '7'].includes(mode)) return 20;
-  if (isFM(mode) || mode === '5' || mode === 'D') return 100;
+// STEP AUTO: the radio's own dial steps (OPERATION SETTING → KEY/DIAL, read on connecting). FM DIAL STEP "Auto" is not
+// described in the manuals; it is taken as 5 kHz below 60 MHz and 20 kHz above (Japanese channel spacing).
+const DIAL_HZ = [5, 10, 20], FM_DIAL_HZ = [5000, 6250, 10000, 12500, 20000, 25000];
+function modeStep(mode, v = 0) {
+  if (['1', '2', '3', '7'].includes(mode)) return DIAL_HZ[+(s.ex['030601'] ?? 2)] || 20;          // SSB / CW
+  if (['6', '9', '8', 'C', 'E'].includes(mode)) return DIAL_HZ[+(s.ex['030602'] ?? 1)] || 10;     // RTTY / DATA / PSK
+  if (isFM(mode)) return FM_DIAL_HZ[+(s.ex['030603'] ?? 6)] || (s.freq[v] < 60e6 ? 5000 : 20000); // FM
+  if (mode === '5' || mode === 'D') return 100; // AM: the radio has no dial step setting for it
   return 10;
 }
 function curStep(v = 0) {
-  const base = cfg.step === 'auto' ? modeStep(s.mode[v]) : cfg.step;
+  const base = cfg.step === 'auto' ? modeStep(s.mode[v], v) : cfg.step;
   if (ui.fine) return isFM(s.mode[v]) || s.mode[v] === '5' || s.mode[v] === 'D' ? 10 : 1;
   if (ui.fast) return base * 10;
   return base;
@@ -837,6 +847,8 @@ function onConnected(baud) {
   const notFtx1 = s.id && !['0800', '0840'].includes(s.id);
   toast(`CAT接続しました（${baud}bps${notFtx1 ? ` / ID ${s.id}: FTX-1ではない可能性` : ''}）`, notFtx1);
   if (cfg.keyPortAuto) openKeyPortAuto();
+  // the radio's dial steps, for STEP AUTO
+  for (const k of ['030601', '030602', '030603']) radio.send(`EX${k};`, { read: true });
 }
 async function toggleConnect(e) {
   if (e?.shiftKey) ui.forcePick = true;
@@ -1159,6 +1171,8 @@ function setupAudio() {
   $('#txGain').addEventListener('input', (e) => { cfg.txGain = +e.target.value; audio.setTxGain(cfg.txGain); save(); });
   $('#txGate').addEventListener('change', (e) => { cfg.txGate = e.target.checked; audio.setTxOpen(!cfg.txGate || ui.ptt); save(); });
   $('#txTone').addEventListener('change', (e) => audio.setTone(e.target.checked));
+  $('#pcSql').checked = cfg.pcSql;
+  $('#pcSql').addEventListener('change', (e) => { cfg.pcSql = e.target.checked; save(); render(); });
   // the microphone was cut off: open it again (keeping the 1 kHz tone if it was on); give up with a message if it fails
   let reopening = false;
   audio.addEventListener('txended', async () => {
@@ -1787,6 +1801,7 @@ function draw() {
     const kind = knobMode(v);
     if (!k.active) k.setFraction(kind === 'af' && cfg.spkMute ? cfg.rxVol / 2 : (kind === 'af' ? s.af[v] : kind === 'rf' ? s.rf[v] : s.sql[v]) / 255);
     $(`#knAF${v}mode`).textContent = kind.toUpperCase();
+    for (const el of $(`#knAF${v}`).parentElement.querySelectorAll('.kn')) el.classList.toggle('on', el.dataset.k === kind);
   }
 
   $('#keySplit').classList.toggle('on', isSplit());
@@ -1803,6 +1818,14 @@ function draw() {
   }
 
   $('#btnPtt').classList.toggle('on', s.tx || ui.ptt);
+  // PC playback follows the radio's squelch: MAIN from RI (SQL open / closed, sent by the radio as it changes),
+  // SUB estimated from its S meter against SQL (as the SUB BUSY lamp); SQL at 0 is always open
+  {
+    const on = cfg.pcSql && conn && !s.tx;
+    const mainOpen = !on || s.sql[0] === 0 || (s.ri ? s.ri.busy : true);
+    const subOpen = !on || s.sql[1] === 0 || s.smeter[1] > Math.max(12, s.sql[1] / 2);
+    audio.setRxSquelch(mainOpen, subOpen);
+  }
   // CW TX / RX panels only while the operated VFO is in CW
   const cw = isCW(s.mode[V()]);
   $('#panelCw').hidden = !cw;

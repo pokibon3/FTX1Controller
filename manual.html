@@ -139,14 +139,14 @@ footer { margin-top: 48px; color: var(--dim); font-size: 13px; border-top: 1px s
 <p>画面は本体のフロントパネルと同じ配置です。中央が本体の液晶画面（LCD）、右がメインダイヤル、左右にツマミがあります。</p>
 <table>
   <tr><th>部分</th><th>操作</th></tr>
-  <tr><td>メインダイヤル</td><td>ドラッグで回す（勢いをつけると回り続けます）、またはマウスホイール。刻みは LCD の VFO メニューの STEP、<span class="btn">FINE/FAST</span> キーで細かく・速く。</td></tr>
+  <tr><td>メインダイヤル</td><td>ドラッグで回す（勢いをつけると回り続けます）、またはマウスホイール。刻みは左側パネル VFO の STEP（AUTO なら本体の設定 KEY/DIAL の DIAL STEP と同じ）、<span class="btn">FINE/FAST</span> キーで細かく・速く。</td></tr>
   <tr><td>周波数の数字</td><td>数字の上でホイール → その桁を上下。周波数をクリック → 数字を直接入力。</td></tr>
   <tr><td>MAIN / SUB の表示</td><td>クリックで操作する側を切り替え。モード表示（USB / CW など）のクリックでモード選択。</td></tr>
   <tr><td>LCD 下段のキー</td><td>D-MODE / 3DSS / MULTI / SCOPE / SPAN / SPEED（本体のスコープ設定。MULTI はアプリの AF-FFT 表示）</td></tr>
   <tr><td>フィルターの絵</td><td>タッチで WIDTH / SHIFT / NARROW / CONTOUR / APF / NOTCH の設定</td></tr>
   <tr><td>上の横長キー</td><td>MAG（長押しで BAND）、N/W（長押しで MODE）、◢（押す: MAIN⇔SUB 入替 / 長押し: SPLIT）、V/M、M▸V など本体と同じ</td></tr>
   <tr><td>FUNC ツマミ</td><td>押すとファンクションメニュー（3 ページ）。選んだ機能（RF POWER、MIC GAIN、CW SPEED など）をツマミで調整</td></tr>
-  <tr><td>左右下のツマミ</td><td>AF（音量）。押すと RF / SQL に切り替え</td></tr>
+  <tr><td>左右下のツマミ</td><td>AF（音量）。押すと RF（FM 系のモードでは SQL）に切り替え。今どれになっているかは、ツマミの上の「AF/RF/SQL」の文字がオレンジになります</td></tr>
   <tr><td>SUB DIAL</td><td>SUB 側の周波数</td></tr>
   <tr><td><span class="btn">TX</span> キー</td><td>押している間送信（SETUP の LATCH で、クリックで送受切替）</td></tr>
   <tr><td>メーター</td><td>受信中は S メーター、送信中は PO と ALC/SWR/COMP/ID/VDD（クリックで切替）</td></tr>
@@ -158,7 +158,7 @@ footer { margin-top: 48px; color: var(--dim); font-size: 13px; border-top: 1px s
 <p>左上の <span class="btn">☰</span>（SUB DIAL の上）で開閉します。各見出しのクリックで折りたためます。</p>
 <dl>
   <dt>USB AUDIO RX（受信音）</dt>
-  <dd>入力（FTX-1）と出力（スピーカー）を選びます（通常は自動）。音量、<span class="btn">MUTE</span>、<span class="btn">● REC</span>（受信音の録音。ダウンロードフォルダに保存）。「本体スピーカーを消音」を ON にすると、本体の音を消して AF ツマミがパソコンの音量になります。</dd>
+  <dd>入力（FTX-1）と出力（スピーカー）を選びます（通常は自動）。音量、<span class="btn">MUTE</span>、<span class="btn">● REC</span>（受信音の録音。ダウンロードフォルダに保存）。「本体スピーカーを消音」を ON にすると、本体の音を消して AF ツマミがパソコンの音量になります。「本体のスケルチに連動」（初期値 ON）は、本体のスケルチが閉じている間パソコンの音を消します（USB の受信音には本体のスケルチがかからないため）。</dd>
   <dt>USB AUDIO TX（送信音声）</dt>
   <dd>パソコンのマイクの音を本体へ送ります。<span class="btn">TX音声 ON</span> で開始、「PTT連動」で送信中だけ音を通す、「1kHz」で試験用の音。FT8 / FT4 の送信では自動で開始します。</dd>
   <dt>CW DECODER</dt>

@@ -69,11 +69,20 @@ export class AudioEngine extends EventTarget {
     const gain = ctx.createGain();
     gain.gain.value = muted ? 0 : volume;
     const recDest = ctx.createMediaStreamDestination();
+    // playback only: a gate per channel (L = MAIN, R = SUB) for the radio's squelch, which the USB audio does not have
+    const split = ctx.createChannelSplitter(2), merge = ctx.createChannelMerger(2);
+    const sq = [ctx.createGain(), ctx.createGain()];
+    const stereo = (stream.getAudioTracks()[0]?.getSettings().channelCount || 2) > 1;
+    if (stereo) {
+      src.connect(split);
+      sq.forEach((g, i) => { split.connect(g, i); g.connect(merge, 0, i); });
+      merge.connect(gain);
+    } else src.connect(sq[0]).connect(gain); // (mono: the MAIN gate only)
     src.connect(analyser);
-    src.connect(gain).connect(ctx.destination);
+    gain.connect(ctx.destination);
     src.connect(recDest);
     if (ctx.state === 'suspended') await ctx.resume();
-    this.rx = { ctx, stream, src, analyser, gain, recDest, volume, muted };
+    this.rx = { ctx, stream, src, analyser, gain, recDest, volume, muted, sq };
     stream.getAudioTracks()[0]?.addEventListener('ended', () => this.stopRx());
     this.dispatchEvent(new Event('state'));
   }
@@ -91,6 +100,18 @@ export class AudioEngine extends EventTarget {
     if (!this.rx) return;
     this.rx.volume = v;
     if (!this.rx.muted) this.rx.gain.gain.setTargetAtTime(v, this.rx.ctx.currentTime, 0.02);
+  }
+
+  // squelch gates: open = played, closed = silent (short fades, no clicks)
+  setRxSquelch(mainOpen, subOpen) {
+    if (!this.rx) return;
+    const t = this.rx.ctx.currentTime;
+    const st = (this.rx.sqOpen ||= [true, true]);
+    [mainOpen, subOpen].forEach((open, i) => {
+      if (st[i] === open) return;
+      st[i] = open;
+      this.rx.sq[i].gain.setTargetAtTime(open ? 1 : 0, t, 0.01);
+    });
   }
 
   setRxMute(m) {

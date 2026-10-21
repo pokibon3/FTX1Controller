@@ -4,7 +4,7 @@ Yaesu FTX-1 を Chrome から操作する CAT / USB オーディオ コントロ
 FTX-1 のフロントパネル（MAIN/SUB 2バンド表示、AF-FFT、FUNC ノブ、メインダイヤル）を模した UI です。
 
 - **CAT**: Web Serial API（ボーレート自動検出, 8N1）
-- **USB オーディオ**: FTX-1 内蔵「USB Audio CODEC」の受信音をPCで再生（AF-FFT/ウォーターフォール表示・録音）、PCマイクからFTX-1へ送信音声
+- **USB オーディオ**: FTX-1 内蔵「USB Audio CODEC」の受信音をPCで再生（AF-FFT/ウォーターフォール表示・録音）、PCマイクからFTX-1へ送信音声。USB の受信音には本体のスケルチがかからないため、「本体のスケルチに連動」（既定 ON）で、スケルチが閉じている間は PC の再生音を消す（MAIN = L は本体の BUSY（`RI`）、SUB = R は S メーターと SQL から推定）
 - **PWA**: Chrome でインストールするとアプリとして独立ウィンドウ起動・オフライン動作
   （旧「Chrome アプリ」は Google により廃止済みのため、後継の PWA 方式で実装）
 
@@ -39,7 +39,7 @@ PTT は既定で CAT (`TX1;`)。RTS/DTR 方式にする場合は SETUP で方式
 
 | 操作 | 内容 |
 |---|---|
-| メインダイヤル | ドラッグ回転（フライホイール付き）/ ホイール。STEP・MHz・FINE で刻み変更 |
+| メインダイヤル | ドラッグ回転（フライホイール付き）/ ホイール。STEP・MHz・FINE で刻み変更（STEP AUTO は本体の KEY/DIAL の SSB/CW・RTTY/PSK・FM DIAL STEP に従う。FM の Auto は 60 MHz 未満 5 kHz / 以上 20 kHz とみなす。AM は 100 Hz） |
 | 周波数の桁 | 桁の上でホイール → その桁を増減。選択中VFOの周波数クリック → 直接入力 |
 | MAIN / SUB 表示 | クリックで操作VFO切替（`VS`）。モード表示クリックで MODE ページ |
 | LCD 下段キー | 実機のスコープ画面と同じ D-MODE（CENTER/CURSOR/FIX）/ 3DSS⇔W/F / MULTI / SCOPE / SPAN / SPEED。D-MODE・3DSS・SPAN・SPEED は本体スコープを CAT（`SS`）で操作、MULTI はアプリの AF-FFT 表示の ON/OFF |
@@ -47,7 +47,7 @@ PTT は既定で CAT (`TX1;`)。RTS/DTR 方式にする場合は SETUP で方式
 | フィルター表示タッチ | WIDTH / SHIFT / NARROW / CONTOUR / APF / NOTCH |
 | N/W・MAG 長押し | MODE / BAND 選択 |
 | 上部キー | 実機と同じ GM / S-DX / PMG / MAG / N/W と ◢SPLIT / V/M / M▸V。◢ は押す: MAIN⇔SUB 入替（`SV`）・長押し: SPLIT、V/M は押す: `VM`・長押し: メモリー書込（`AM`）、M▸V は押す: `MA`・長押し: メモリーチューン。GM / S-DX / PMG は CAT 非対応 |
-| 左ノブ | AF / SQL（MAIN・SUB） |
+| 左右下のノブ | AF / RF / SQL（MAIN・SUB）。押すと AF ⇔ RF（FM 系は SQL）を切替。今の機能はノブ上の文字がオレンジ |
 | CAT CONSOLE | SETUP の「CAT CONSOLE を表示」で表示（既定は非表示） |
 | TX キー | 押している間送信（SETUP の LATCH でクリック切替）。ダイヤルロックは LCD の VFO メニューの LOCK |
 | メーター | 送信中は PO + ALC/SWR/COMP/ID/VDD（クリックで切替） |
@@ -98,7 +98,7 @@ QMB（`QI`/`QR`）・BUSY/HI-SWR/チューニング中（`RI`）・モニター 
 | MULTI（オシロスコープ / AF-FFT 表示） | アプリの AF-FFT 表示の ON/OFF |
 | GM / S-DX / PMG キー | 操作不可（押すと「CAT では操作できません」） |
 | SUB 側の BUSY ランプ | `RI` は MAIN 側のみのため、SUB は S メーターから推定 |
-| ダイヤルの刻み | アプリ独自（本体のメニュー `EX` の DIAL STEP とは別） |
+| ダイヤルの刻み | STEP AUTO は本体の DIAL STEP（`EX0306xx`）を読んで合わせる。1 回転あたりのステップ数はアプリ独自（マウス操作用） |
 | 画面の明るさ・色など表示設定 | 対象外 |
 
 ## ファイル

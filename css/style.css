@@ -139,6 +139,8 @@ button { font: inherit; color: inherit; }
 .kw label { font-size: 12px; font-weight: 800; letter-spacing: .3px; color: #eef0f3; white-space: nowrap; text-align: center; line-height: 1.15; }
 .kw label b { display: inline-block; font-size: 8px; padding: 0 3px; border: 1px solid #c9ced6; border-radius: 3px; font-weight: 700; vertical-align: 2px; }
 .kw label em { display: none; }
+/* AF / RF / SQL: the function the knob turns now is lit */
+.kw label .kn.on { color: var(--accent); }
 .knob {
   position: relative; border-radius: 50%; cursor: grab; touch-action: none; outline: none;
   background: repeating-conic-gradient(#303236 0 2.5deg, #0b0c0d 2.5deg 5deg);

@@ -27,6 +27,7 @@
         <div class="field"><label>出力（スピーカー）</label><select id="rxOut"></select></div>
         <div class="field"><label>音量</label><input type="range" id="rxVol" min="0" max="2" step="0.01"></div>
         <label class="chk" title="本体の AF GAIN を 0 にして本体スピーカーを止め、AF ツマミで PC の音量を調整（USB 音声は AF GAIN の影響を受けません）"><input type="checkbox" id="spkMute"> 本体スピーカーを消音（AF ツマミ = PC 音量）</label>
+        <label class="chk" title="USB の受信音には本体のスケルチがかからないため、本体のスケルチが閉じている間は PC の再生音を消します（MAIN は本体の BUSY、SUB は S メーターと SQL から判断）"><input type="checkbox" id="pcSql"> 本体のスケルチに連動（閉じている間は消音）</label>
         <div class="vu"><i id="rxVu"></i></div>
         <div class="row">
           <button class="btn" id="btnRx">RX開始</button>
@@ -140,7 +141,7 @@
           <button class="txbtn" id="btnPtt" title="押している間送信（Space キーでも可。SETUP の LATCH でクリック切替）">TX</button>
         </div>
         <div class="kw">
-          <label>SUB <b>DSP</b><br>AF/RF/SQL<em id="knAF1mode">AF</em></label>
+          <label>SUB <b>DSP</b><br><span class="kn" data-k="af">AF</span>/<span class="kn" data-k="rf">RF</span>/<span class="kn" data-k="sql">SQL</span><em id="knAF1mode">AF</em></label>
           <div class="knob knob-r" id="knAF1" title="SUB AF / クリックで RF・SQL 切替"><div class="cap"><i></i></div></div>
         </div>
       </section>
@@ -215,7 +216,7 @@
           </div>
           <button class="dispkey" data-act="disp">DISP</button>
           <div class="kw">
-            <label>MAIN <b>DSP</b><br>AF/RF/SQL<em id="knAF0mode">AF</em></label>
+            <label>MAIN <b>DSP</b><br><span class="kn" data-k="af">AF</span>/<span class="kn" data-k="rf">RF</span>/<span class="kn" data-k="sql">SQL</span><em id="knAF0mode">AF</em></label>
             <div class="knob knob-r" id="knAF0" title="MAIN AF / クリックで RF・SQL 切替"><div class="cap"><i></i></div></div>
           </div>
         </div>
