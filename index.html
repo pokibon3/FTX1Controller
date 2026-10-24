@@ -51,6 +51,7 @@
       <summary>CW DECODER</summary>
         <div class="field"><label>入力チャンネル</label>
           <select id="decCh"><option value="L">L</option><option value="R">R</option><option value="MIX">L+R</option></select>
+          <label class="chk" title="ノイズ低減（ALE）。弱い信号を拾いやすくなり、ノイズからの偽文字が減ります"><input type="checkbox" id="decNr"> NR</label>
         </div>
         <div class="field"><label>入力ゲイン <span id="decGainV">0 dB</span></label><input type="range" id="decGain" min="-20" max="20" step="1"></div>
         <p class="hint">デコーダは <a href="https://github.com/pokibon3/cw_decoder4" target="_blank" rel="noopener">CW Decoder 4</a> の WebAssembly 版（GPL）。RX音声に BPF（Q=3, トーン追従）をかけて入力します。</p>
@@ -277,8 +278,9 @@
     </div>
 
     <!-- FT8 / FT4 receive / transmit: shown in DATA-U / DATA-L -->
-    <div class="panel panel-wide" id="panelFt8" hidden>
-      <h2><span id="ft8Title">FT8</span> <span class="tag">RX</span><span class="tag tag-tx" id="ft8TxTag" hidden>TX</span><span class="ft8-slot" id="ft8Slot"><i id="ft8Bar"></i></span><span class="h2-sp"></span><span class="tag" id="ft8Info">--</span></h2>
+    <!-- receive on the left, transmit on the right (as the CW panels) -->
+    <div class="panel ft8p" id="panelFt8" hidden>
+      <h2><span class="ft8-title">FT8</span> <span class="tag">RX</span><span class="ft8-slot" id="ft8Slot"><i id="ft8Bar"></i></span><span class="h2-sp"></span><span class="tag" id="ft8Info">--</span></h2>
       <div class="ft8-head"><span>UTC</span><span>dB</span><span>DT</span><span>Freq</span><span>Message</span></div>
       <div class="ft8-list" id="ft8List"></div>
       <div class="cw-keys ft8-keys">
@@ -287,6 +289,10 @@
         <button class="btn" id="btnFt8Clr">CLR</button>
         <label class="chk"><input type="checkbox" id="ft8Cq"> CQ・自局宛のみ</label>
       </div>
+      <p class="hint">FT8 は 15 秒ごと（UTC :00 / :15 / :30 / :45）、FT4 は 7.5 秒ごとに解読します。PC の時計が ±1 秒（FT4 は ±0.5 秒）以内に合っている必要があります。デコーダは ft8_lib（MIT）。</p>
+    </div>
+    <div class="panel ft8p" id="panelFt8Tx" hidden>
+      <h2><span class="ft8-title">FT8</span> <span class="tag tag-tx">TX</span><span class="h2-sp"></span><span class="tag err" id="ft8TxTag" hidden>送信中</span></h2>
       <div class="ft8-txcfg">
         <label>MY CALL<input type="text" id="ft8My" maxlength="11" spellcheck="false" placeholder="JA1XXX"></label>
         <label>GRID<input type="text" id="ft8Grid" maxlength="6" spellcheck="false" placeholder="PM95"></label>
@@ -309,8 +315,7 @@
         <button class="btn" id="btnFt8Per" title="送信する周期（UTC 秒）">00/30</button>
         <label class="chk"><input type="checkbox" id="ft8Auto"> AUTO SEQ</label>
       </div>
-      <p class="hint">FT8 は 15 秒ごと（UTC :00 / :15 / :30 / :45）、FT4 は 7.5 秒ごとに解読します。PC の時計が ±1 秒（FT4 は ±0.5 秒）以内に合っている必要があります。デコーダは ft8_lib（MIT）。<br>
-        送信: 一覧の行をクリックでその局を DX に設定（ダブルクリックで TX ON）。DATA-U・USB AUDIO TX（自動で開始）を使い、PTT は SETUP の方式。AUTO SEQ は WSJT-X と同じ順で Tx を進めます。</p>
+      <p class="hint">一覧の行をクリックでその局を DX に設定（ダブルクリックで TX ON）。DATA-U・USB AUDIO TX（自動で開始）を使い、PTT は SETUP の方式。AUTO SEQ は WSJT-X と同じ順で Tx を進めます。</p>
     </div>
 
     <div class="panel panel-wide" id="panelConsole" hidden>

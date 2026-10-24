@@ -35,7 +35,7 @@ const DEFAULTS = {
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'lr', layoutV2: true,
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
-  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, ft8Mode: 'FT8', pcSql: true, dec: true, decCh: 'L', decGain: 0, console: false,
+  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, ft8Mode: 'FT8', pcSql: true, dec: true, decCh: 'L', decGain: 0, decNr: true, console: false,
 };
 const cfg = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
@@ -1263,6 +1263,7 @@ function setupSettings() {
 function setupDecoder() {
   const dec = new CwDecoder();
   dec.channel = cfg.decCh;
+  dec.nr = cfg.decNr;
   // display and controls as cw_decoder4's web page
   new CwView(dec, {
     panel: $('#panelDec'), text: $('#decText'), fft: $('#decFft'), scope: $('#decScope'),
@@ -1295,6 +1296,8 @@ function setupDecoder() {
   });
   $('#decCh').value = cfg.decCh;
   $('#decCh').addEventListener('change', (e) => { cfg.decCh = e.target.value; dec.setChannel(cfg.decCh); save(); });
+  $('#decNr').checked = cfg.decNr;
+  $('#decNr').addEventListener('change', (e) => { cfg.decNr = e.target.checked; dec.setNr(cfg.decNr); save(); });
   const gainLabel = () => { $('#decGainV').textContent = `${cfg.decGain > 0 ? '+' : ''}${cfg.decGain} dB`; };
   $('#decGain').value = cfg.decGain;
   gainLabel();
@@ -1662,7 +1665,7 @@ function setupFt8() {
   $('#btnFt8Per').addEventListener('click', () => { cfg.ft8Per = 1 - cfg.ft8Per; save(); drawTx(); });
   // FT8 / FT4: TX stops, the list starts over (slot numbers differ)
   const drawMode = () => {
-    $('#ft8Title').textContent = ft8.mode;
+    for (const el of document.querySelectorAll('.ft8-title')) el.textContent = ft8.mode;
     $('#btnFt8Mode').textContent = ft8.mode;
   };
   $('#btnFt8Mode').addEventListener('click', () => {
@@ -1835,7 +1838,9 @@ function draw() {
   const cw = isCW(s.mode[V()]);
   $('#panelCw').hidden = !cw;
   $('#panelDec').hidden = !cw;
-  $('#panelFt8').hidden = !['C', '8'].includes(s.mode[V()]);
+  const data = ['C', '8'].includes(s.mode[V()]);
+  $('#panelFt8').hidden = !data;
+  $('#panelFt8Tx').hidden = !data;
   $('#cwWpm').textContent = s.ks;
   if (!ui.cwSpeedDrag) $('#cwSpeed').value = s.ks;
   $('#catErr').textContent = `ERR ${s.errors}`;
