@@ -90,10 +90,18 @@ footer { margin-top: 48px; color: var(--dim); font-size: 13px; border-top: 1px s
 <h2 id="install">2. インストール（アプリを開く）</h2>
 <h3>Web 版（おすすめ）</h3>
 <ol>
-  <li>Chrome で <a href="https://pokibon3.github.io/FTX1Controller/">https://pokibon3.github.io/FTX1Controller/</a> を開きます。これだけで使えます。</li>
-  <li>アプリとして使うときは、左側パネル（<span class="btn">☰</span>）の SETUP にある <span class="btn">インストール</span> を押すか、Chrome のアドレスバー右の「インストール」アイコンを押します。</li>
-  <li>インストールすると、独立したウインドウで起動でき、インターネットにつながっていなくても動きます。</li>
+  <li>Chrome（または Edge）で <a href="https://pokibon3.github.io/FTX1Controller/">https://pokibon3.github.io/FTX1Controller/</a> を開きます。これだけで使えます。</li>
+  <li>アプリとして使うときは、次のどれかでインストールします。
+    <ul>
+      <li>左側パネル（<span class="btn">☰</span>）の SETUP にある <span class="btn">インストール</span> を押す</li>
+      <li>Chrome のアドレスバー右の「インストール」アイコン（モニターに↓の形）を押す</li>
+      <li>Chrome 右上の <span class="btn">⋮</span> →「キャスト、保存、共有」→「ページをアプリとしてインストール…」</li>
+    </ul>
+  </li>
+  <li>確認が出たら「インストール」を押します。独立したウインドウで起動し、次からは Dock・Launchpad（Windows はスタートメニュー）から開けます。インターネットにつながっていなくても動きます。</li>
 </ol>
+<div class="note"><b>入れ直し</b>v1.31.1 以前をインストールしている場合、v1.31.2 からアプリの識別名（マニフェストの id）が変わったため、別のアプリとして扱われることがあります。アドレスバーにインストールのアイコンが出るときは、古いほうを<a href="#uninstall">アンインストール</a>してから入れ直してください。設定はそのまま残ります。</div>
+<div class="note"><b>出ないとき</b>インストールのボタンやアイコンが出ないときは、ページを読み込み直してください。公開直後は反映まで数分かかることがあります。</div>
 <div class="note"><b>更新</b>新しい版が公開されると、次にアプリを開いたときに自動で入れ替わります。すぐに反映したいときは <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>（Windows は <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>）で読み込み直します。今の版は画面右下に表示されます。</div>
 
 <h3>ローカル版（Mac・開発用）</h3>
@@ -103,8 +111,8 @@ footer { margin-top: 48px; color: var(--dim); font-size: 13px; border-top: 1px s
 </ol>
 <div class="warn"><b>注意</b>HTML ファイルを直接開く（<code>file://</code>）と動きません。Web 版か <code>start.command</code> で開いてください。</div>
 
-<h3>アンインストール</h3>
-<p>インストールしたアプリのウインドウ右上の <span class="btn">⋮</span> →「FTX-1 Controller をアンインストール」を選びます。</p>
+<h3 id="uninstall">アンインストール</h3>
+<p>インストールしたアプリのウインドウ右上の <span class="btn">⋮</span> →「FTX-1 Controller をアンインストール」を選びます。Chrome で <code>chrome://apps</code> を開き、アイコンを右クリック →「Chrome から削除」でも削除できます。</p>
 
 <h2 id="radio">3. 本体側の設定</h2>
 <p>本体の設定メニュー（または、アプリの設定メニュー → <a href="#setting">9 章</a>）で、使う機能に合わせて次を設定します。項目は 本体の [FUNC] ツマミ長押し → 設定画面 から選びます。</p>

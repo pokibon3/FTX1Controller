@@ -711,7 +711,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .sb-sp { flex: 1; }
 #sbClock { font-variant-numeric: tabular-nums; color: var(--text); }
 .sb-ver { color: #6f757d; }
-.sb-help { color: var(--lcd-cyan); text-decoration: none; }
+.sb-help {
+  padding: 1px 10px; border-radius: 4px; text-decoration: none; font-weight: 600; color: var(--lcd-cyan);
+  background: linear-gradient(180deg, #353a41, #262a30); border: 1px solid #0a0b0d;
+}
+.sb-help:hover { border-color: #4b525b; }
 .sb-help:hover { text-decoration: underline; }
 .toast { bottom: 40px; }
 
