@@ -51,7 +51,7 @@
       <summary>CW DECODER</summary>
         <div class="field"><label>入力チャンネル</label>
           <select id="decCh"><option value="L">L</option><option value="R">R</option><option value="MIX">L+R</option></select>
-          <label class="chk" title="ノイズ低減（ALE）。弱い信号を拾いやすくなり、ノイズからの偽文字が減ります"><input type="checkbox" id="decNr"> NR</label>
+          <label class="chk" title="適応型フィルタ（ALE によるノイズ低減）。弱い信号を拾いやすくなり、ノイズからの偽文字が減ります"><input type="checkbox" id="decNr"> 適応型フィルタ</label>
         </div>
         <div class="field"><label>入力ゲイン <span id="decGainV">0 dB</span></label><input type="range" id="decGain" min="-20" max="20" step="1"></div>
         <p class="hint">デコーダは <a href="https://github.com/pokibon3/cw_decoder4" target="_blank" rel="noopener">CW Decoder 4</a> の WebAssembly 版（GPL）。RX音声に BPF（Q=3, トーン追従）をかけて入力します。</p>
