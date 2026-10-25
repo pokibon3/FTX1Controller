@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Play:wght@700&family=Saira:ital,wdth,wght@0,100..125,100..900;1,100..125,100..900&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Play:wght@700&family=Saira+Condensed:wght@600;700;800&family=Saira:ital,wdth,wght@0,100..125,100..900;1,100..125,100..900&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -23,7 +23,7 @@
   <aside id="sidebar" aria-label="設定">
     <details open id="secRx">
       <summary>USB AUDIO <span class="tag">RX</span></summary>
-        <div class="field"><label>入力（FTX-1）</label><select id="rxIn"></select></div>
+        <div class="field"><label>入力（<span class="model-name">FTX-1</span>）</label><select id="rxIn"></select></div>
         <div class="field"><label>出力（スピーカー）</label><select id="rxOut"></select></div>
         <div class="field"><label>音量</label><input type="range" id="rxVol" min="0" max="2" step="0.01"></div>
         <label class="chk" title="本体の AF GAIN を 0 にして本体スピーカーを止め、AF ツマミで PC の音量を調整（USB 音声は AF GAIN の影響を受けません）"><input type="checkbox" id="spkMute"> 本体スピーカーを消音（AF ツマミ = PC 音量）</label>
@@ -38,7 +38,7 @@
     <details open id="secTx">
       <summary>USB AUDIO <span class="tag tag-tx">TX</span></summary>
         <div class="field"><label>マイク（PC）</label><select id="txIn"></select></div>
-        <div class="field"><label>出力（FTX-1）</label><select id="txOut"></select></div>
+        <div class="field"><label>出力（<span class="model-name">FTX-1</span>）</label><select id="txOut"></select></div>
         <div class="field"><label>送信レベル</label><input type="range" id="txGain" min="0" max="3" step="0.01"></div>
         <div class="vu vu-tx"><i id="txVu"></i></div>
         <div class="row">
@@ -66,12 +66,15 @@
     </details>
     <details open id="secSet">
       <summary>SETUP</summary>
+        <div class="field"><label>機種（変えるとページを読み込み直します）</label>
+          <select id="model"><option value="ftx1">FTX-1</option><option value="ft991a">FT-991A</option></select>
+        </div>
         <div class="field"><label>CAT ボーレート</label>
           <select id="baud">
             <option value="auto" selected>自動検出</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>115200</option>
           </select>
         </div>
-        <div class="field"><label>本体の CAT-1 / CAT-2 ボーレート</label>
+        <div class="field"><label id="radioBaudLabel">本体の CAT-1 / CAT-2 ボーレート</label>
           <div class="row">
             <select id="radioBaud" style="flex:1"><option>115200</option><option>38400</option><option>19200</option><option>9600</option><option>4800</option></select>
             <button class="btn" id="btnRadioBaud" title="本体のメニュー CAT-1 RATE / CAT-2 RATE に書き込み、新しい速度で再接続">書込</button>
@@ -224,6 +227,96 @@
       </section>
     </div>
   </main>
+
+  <!-- FT-991A front panel (operation manual p.18-22), put in place of the field head above when SETUP selects it.
+       Element ids shared with the FTX-1 face are the ones app.js drives the same way on both. -->
+  <template id="head991">
+  <main class="radio r991" id="radio">
+    <button class="tkey-cat tkey-menu" id="btnMenu" title="USB AUDIO / CW DECODER / SETUP パネルの表示切替" aria-label="メニュー">&#9776;</button>
+    <div class="r9-pw"><span class="r9-lab">ON/OFF</span><button class="r9-power" id="btnConnect" title="電源（CAT ポートに接続 / 切断）"><span class="tled"></span><svg class="r9-pwsym" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M7.1 6.6a7 7 0 1 0 9.8 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>
+    <button class="txbtn r9-tx" id="btnPtt" title="押している間送信（Space キーでも可。SETUP の LATCH でクリック切替）">TX</button>
+
+    <div class="r9-bezel"></div>
+    <div class="r9-logo">YAESU</div>
+    <section class="r9-screen">
+      <div class="lcd lcd991" id="lcd">
+        <!-- placed as on the radio's screen (product photo): blue band with VFO-A, clock, mode box, MULTI function, frequency
+             and MULTI level bar; then the black VFO-B line with the icons, VFO-B (or CLAR) -->
+        <div class="band t9-a" id="band0" data-vfo="0">
+          <span class="t9-vfo" id="t9Vfo">VFO-A</span><span class="t9-ch" id="t9Ch"></span>
+          <span class="t9-clock" id="t9Clock"></span>
+          <button class="b-mode" data-vfo="0" title="MODE">USB</button>
+          <span class="t9-hiswr" id="t9Hiswr">HI-SWR</span>
+          <div class="b-func" id="funcBox" title="MULTI ツマミの機能">RF-P</div>
+          <div class="b-freq"><div class="freq" id="freq0"></div></div>
+          <div class="t9-lvl" title="MULTI ツマミの値"><i id="t9Lvl"></i></div>
+        </div>
+        <div class="t9-mid">
+          <div class="st-bar" id="stBar"></div>
+          <div class="band t9-b" id="band1" data-vfo="1">
+            <span class="t9-bl">VFO-B</span><button class="b-mode" data-vfo="1">USB</button>
+            <div class="t9-bf"><div class="freq" id="freq1"></div></div>
+            <b class="t9-clartag" id="t9ClarTag">CLAR</b><span class="t9-clarofs" id="t9ClarOfs">0Hz</span>
+          </div>
+        </div>
+        <canvas class="b-meter" id="meter0" title="タッチで送信メーター選択"></canvas>
+        <div class="scope"><canvas id="scope"></canvas><div class="sc-info" id="scInfo"></div></div>
+        <div class="softbar" id="softbar"></div>
+
+        <div class="pop" id="pop" hidden>
+          <div class="pop-title"><span id="popTitle">MODE</span><button class="pop-x" id="popClose">✕</button></div>
+          <div class="pop-grid" id="popGrid"></div>
+        </div>
+        <div class="exm" id="exm" hidden>
+          <div class="exm-title" id="exmTitle"></div>
+          <div class="exm-body"><div class="exm-groups" id="exmGroups"></div><div class="exm-items" id="exmItems"></div></div>
+          <div class="exm-foot"><button class="exm-back" id="exmBack">BACK</button><button class="exm-back exm-def" id="exmDef" hidden>初期値に戻す</button><button class="exm-back exm-sel" id="exmSel" title="選んだ項目の値を MULTI ツマミで変更 / もう一度押して確定">SELECT</button></div>
+        </div>
+        <div class="lcd-popup" id="popup" hidden>
+          <div class="popup-label" id="popupLabel"></div>
+          <div class="popup-value" id="popupValue"></div>
+          <div class="popup-bar"><i id="popupBar"></i></div>
+        </div>
+      </div>
+    </section>
+
+    <button class="r9k k-f" data-act="fkey" title="押す: ファンクションメニュー"><b>F</b><em>M-LIST</em></button>
+    <button class="r9k k-menu" data-act="menu991" title="押す: メニュー（001〜153）"><b>MENU</b><em>SETUP</em></button>
+    <button class="r9k k-band" data-act="band991" title="バンド選択"><b>BAND</b></button>
+    <button class="r9k k-mode" data-act="mode991" title="モード選択"><b>MODE</b></button>
+    <div class="r9-multi"><span class="r9-lab">MULTI</span><div class="knob" id="knFunc" title="MULTI（画面に出ている機能を調整）"><div class="cap"><i></i></div></div></div>
+
+    <div class="r9-silk"><span>HF/VHF/UHF ALL MODE TRANSCEIVER</span><b>FT-991<em>A</em></b></div>
+    <div class="r9-plate"></div>
+    <!-- LED strip: busy (speaker) / TX (antenna), then MEM / VFO-A / VFO-B with a green (receive) and a red (transmit) lamp
+         under each, FAST and LOCK -->
+    <div class="r9-leds">
+      <span class="r9-ico" id="led9Rx" title="受信（スケルチが開いている）">◀)))</span><span class="r9-ico tx" id="led9Tx" title="送信">((·))</span>
+      <span class="r9-vl" id="led9Mem"><b>MEM</b><i></i><i></i></span><span class="r9-vl" id="led9A"><b>VFO-A</b><i></i><i></i></span><span class="r9-vl" id="led9B"><b>VFO-B</b><i></i><i></i></span>
+      <span class="r9-sq" id="led9Fast">FAST</span><span class="r9-sq" id="led9Lock">LOCK</span>
+    </div>
+    <button class="r9s k-ab" data-act="ab" title="VFO-A を VFO-B にコピー">A=B</button>
+    <button class="r9s k-sw" data-act="swap" title="VFO-A と VFO-B を入れ替え">A/B</button>
+    <button class="r9s k-fast" data-act="fast" title="ダイアルの変化量 ×10">FAST</button>
+    <button class="r9s k-lock" data-act="lock" title="ダイアルロック">LOCK</button>
+    <button class="r9s col-l r1" data-act="qmb" title="押す: QMB 呼出 / 長押し: QMB 書込">RCL/STO</button>
+    <button class="r9s col-l r2" data-act="tune991" title="押す: チューナー ON/OFF / 長押し: オートチューン">TUNE</button>
+    <button class="r9s col-l r3" data-act="cs" title="カスタムスイッチ（CAT 不可）">C.S</button>
+    <button class="r9s col-l r4" data-act="txw" title="押している間 送信周波数を受信">TXW</button>
+    <button class="r9s col-r r1" data-act="clar991" title="押す: クラリファイア ON/OFF / 長押し: オフセットを 0 に">CLAR</button>
+    <button class="r9s col-r r2" data-act="vm" title="VFO ⇔ メモリー">V/M</button>
+    <button class="r9s col-r r3" data-act="am991" title="長押し: VFO-A をメモリーに書込">A▸M</button>
+    <button class="r9s col-r r4" data-act="split991" title="押す: スプリット / 長押し: クイックスプリット">SPLIT</button>
+    <div class="dial" id="dial">
+      <div class="dial-ring"></div>
+      <div class="dial-disc"><div class="dial-dimple"></div></div>
+    </div>
+
+    <div class="r9-kn kn-clar"><div class="knob" id="knSubDial" title="CLAR/VFO-B（スプリット中は VFO-B、それ以外はクラリファイア）"><div class="cap"><i></i></div></div><span class="r9-lab">CLAR/VFO-B</span></div>
+    <div class="r9-kn kn-rf"><span class="r9-lab">RF GAIN</span><div class="knob" id="knRF" title="RF GAIN"><div class="cap"><i></i></div></div></div>
+    <div class="r9-kn kn-af"><span class="r9-lab">AF GAIN</span><div class="knob" id="knAF0" title="AF GAIN"><div class="cap"><i></i></div></div></div>
+  </main>
+  </template>
 
   <!-- ===== PC side deck ===== -->
   <section class="deck">

@@ -15,9 +15,25 @@ export function wheelNotch(e, state) {
   return e.deltaY < 0 ? 1 : -1;
 }
 
+// Acceleration for a wheel notch (n = ±1 from wheelNotch): turned slowly, a notch stays one step; notches following each
+// other quickly (a fast spin) count more, up to 8 steps, growing with the run of quick notches.
+const ACCEL_MS = 160;
+export function wheelAccel(n, state) {
+  const now = performance.now();
+  const quick = now - (state.accT || 0) < ACCEL_MS && Math.sign(n) === state.accDir;
+  state.run = quick ? (state.run || 0) + 1 : 0;
+  state.accT = now; state.accDir = Math.sign(n);
+  return n * Math.min(8, 1 + Math.floor(state.run / 2));
+}
+
 export class Knob {
-  constructor(el, { onTurn, onPress, pxPerStep = 5 } = {}) {
+  // angular: turned by circling it (the angle around its centre, degPerStep per step) instead of by straight drags
+  // accel: mouse-wheel acceleration (wheelAccel)
+  constructor(el, { onTurn, onPress, pxPerStep = 5, angular = false, degPerStep = 15, accel = false } = {}) {
     this.el = el;
+    this.accel = accel;
+    this.angular = angular;
+    this.degPerStep = degPerStep;
     this.cap = el.querySelector('.cap') || el;
     this.onTurn = onTurn;
     this.pxPerStep = pxPerStep;
@@ -34,11 +50,24 @@ export class Knob {
       this.active = true;
       this.moved = 0;
       this.last = { x: e.clientX, y: e.clientY };
+      this.lastA = this._angleOf(e);
       el.classList.add('grab');
     });
     el.addEventListener('pointermove', (e) => {
       if (!this.active) return;
       this.moved += Math.abs(e.clientX - this.last.x) + Math.abs(e.clientY - this.last.y);
+      if (this.angular) {
+        const a = this._angleOf(e);
+        let d = a - this.lastA;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        this.lastA = a;
+        this.last = { x: e.clientX, y: e.clientY };
+        this.acc += d;
+        const n = Math.trunc(this.acc / this.degPerStep);
+        if (n) { this.acc -= n * this.degPerStep; this._turn(n); }
+        return;
+      }
       this.acc += (e.clientX - this.last.x) - (e.clientY - this.last.y);
       this.last = { x: e.clientX, y: e.clientY };
       const n = Math.trunc(this.acc / this.pxPerStep);
@@ -55,7 +84,7 @@ export class Knob {
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
       const n = wheelNotch(e, this.wheelState);
-      if (n) this._turn(n);
+      if (n) this._turn(this.accel ? wheelAccel(n, this.wheelState) : n);
     }, { passive: false });
     el.addEventListener('keydown', (e) => {
       const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[e.key];
@@ -64,8 +93,14 @@ export class Knob {
     });
   }
 
+  // angle of the pointer around the knob's centre, clockwise from 12 o'clock (deg)
+  _angleOf(e) {
+    const r = this.el.getBoundingClientRect();
+    return Math.atan2(e.clientX - (r.left + r.width / 2), -(e.clientY - (r.top + r.height / 2))) * 180 / Math.PI;
+  }
+
   _turn(n) {
-    this.free += n * 12;
+    this.free += n * (this.angular ? this.degPerStep : 12);
     this.onTurn?.(n);
   }
 

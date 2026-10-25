@@ -15,8 +15,8 @@ export class SerialLink extends EventTarget {
 
   get isOpen() { return !!this.writer; }
 
-  async open(port, baudRate, { framed = true } = {}) {
-    await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none', bufferSize: 4096 });
+  async open(port, baudRate, { framed = true, stopBits = 1 } = {}) {
+    await port.open({ baudRate, dataBits: 8, stopBits, parity: 'none', flowControl: 'none', bufferSize: 4096 });
     this.port = port;
     this.framed = framed;
     this.closing = false;
@@ -32,7 +32,7 @@ export class SerialLink extends EventTarget {
         for (;;) {
           const { value, done } = await this.reader.read();
           if (done) break;
-          if (value) this._ingest(this.dec.decode(value, { stream: true }));
+          if (value) { this.rawTap?.(value); this._ingest(this.dec.decode(value, { stream: true })); }
         }
       } catch (e) {
         if (!this.closing) this.dispatchEvent(new CustomEvent('error', { detail: e }));

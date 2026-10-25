@@ -10,6 +10,10 @@ FTX-1 のフロントパネル（MAIN/SUB 2バンド表示、AF-FFT、FUNC ノ�
 
 使い方（インストール〜操作）は [manual.html](manual.html)（アプリ画面右下の「使い方」からも開けます）。
 
+**FT-991A にも対応**: 左側パネル SETUP の「機種」で FT-991A を選ぶと、FT-991A の前面パネル（3.5 インチ TFT、F / MENU / BAND / MODE キー、MULTI、
+メインダイアルまわりのキー、CLAR/VFO-B・RF GAIN・AF GAIN）とそのコマンド（FT-991 シリーズ CAT マニュアル 1808-D）に切り替わります。
+CW デコーダ / CW 送信 / FT8・FT4 / USB オーディオは共通。詳しくは manual.html の 11 章。
+
 ## 起動
 
 **Web 版**: https://pokibon3.github.io/FTX1Controller/ を Chrome で開くだけで使えます（インストール後はオフラインでも起動）。
@@ -107,7 +111,12 @@ QMB（`QI`/`QR`）・BUSY/HI-SWR/チューニング中（`RI`）・モニター 
 index.html, css/style.css
 manual.html    使い方（アプリから開くマニュアル）
 js/serial.js   Web Serial（';' 区切りフレーミング）
-js/ftx1.js     FTX-1 CAT コマンド・状態管理・ポーリング
+js/ftx1.js     FTX-1 CAT コマンド・状態管理・ポーリング（モード / バンド / 帯域の表は機種で切替）
+js/ft991a.js   FT-991A CAT コマンド（ftx1.js を継承し、形式の違うコマンドだけ置き換え）
+js/model.js    SETUP で選んだ機種（ページ読み込み時に決まる）
+js/meter991.js FT-991A のバーメーター
+js/exmenu991.js  FT-991A のメニュー 001〜153（CAT マニュアル表 3 から生成）
+js/exdefaults991.js  FT-991A のメニューの初期値（取扱説明書のメニュー一覧から生成）
 js/audio.js    USB オーディオ RX/TX・録音
 js/knob.js     ノブ / メインダイヤル
 js/scope.js    AF-FFT + ウォーターフォール

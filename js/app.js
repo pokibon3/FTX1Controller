@@ -1,10 +1,15 @@
 import {
   FTX1, MODES, MODE_NAME, BANDS, bandOf, bandType, AGC, PREAMP_HF,
-  widthText, widthHz, widthMax, sText, S_TICKS, isCW, isFM,
+  widthText, widthHz, widthMin, widthMax, sText, S_TICKS, isCW, isFM,
 } from './ftx1.js';
+import { FT991A } from './ft991a.js';
+import { IS991, MODEL_NAME } from './model.js';
+import { Meter991 } from './meter991.js';
+import { EX_MENUS_991 } from './exmenu991.js';
+import { EX_DEFAULTS_991 } from './exdefaults991.js';
 import { SerialLink } from './serial.js';
 import { AudioEngine, isRadioDevice } from './audio.js';
-import { Knob, Dial, wheelNotch } from './knob.js';
+import { Knob, Dial, wheelNotch, wheelAccel } from './knob.js';
 import { AfScope } from './scope.js';
 import { FtxMeter } from './ftxmeter.js';
 import { FilterDisplay } from './filterdisp.js';
@@ -22,16 +27,22 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const val = (x) => (typeof x === 'function' ? x() : x);
 
-const radio = new FTX1();
+// FT-991A: its own face (index.html template) replaces the FTX-1 field head before anything binds to the elements
+if (IS991) {
+  $('#radio').replaceWith($('#head991').content.cloneNode(true));
+  document.title = 'FT-991A Controller';
+}
+const radio = IS991 ? new FT991A() : new FTX1();
 const s = radio.s;
 const audio = new AudioEngine();
 const scope = new AfScope($('#scope'));
-const filters = [new FilterDisplay($('#filt0')), new FilterDisplay($('#filt1'))];
-const meters = [new FtxMeter($('#meter0')), new FtxMeter($('#meter1'))];
+// the FT-991A screen has no filter display and one meter
+const filters = IS991 ? [] : [new FilterDisplay($('#filt0')), new FilterDisplay($('#filt1'))];
+const meters = IS991 ? [new Meter991($('#meter0'))] : [new FtxMeter($('#meter0')), new FtxMeter($('#meter1'))];
 
 // ---------------- settings ----------------
 const DEFAULTS = {
-  catBaud: 'auto', step: 'auto', dialRes: 250, pttMethod: 'cat1', tot: 180,
+  model: 'ftx1', catBaud: 'auto', catBaud991: 'auto', step: 'auto', dialRes: 250, pttMethod: 'cat1', tot: 180,
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'lr', layoutV2: true,
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
@@ -41,7 +52,7 @@ const cfg = (() => {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
 })();
 if (!['auto', 1, 10, 20, 50, 100, 200, 500, 1000, 2500, 5000, 6250, 10000, 12500, 25000].includes(cfg.step)) cfg.step = 'auto';
-if (![3, 4, 5, 6, 7, 8].includes(cfg.meterSel)) cfg.meterSel = 5;
+if (![3, 4, 5, 6, 7, 8].includes(cfg.meterSel) || (IS991 && cfg.meterSel === 8)) cfg.meterSel = 5; // the FT-991A has no VDD meter
 // CAT CONSOLE and the side panel always start closed (they open on demand: SETUP checkbox / ☰)
 cfg.console = false;
 cfg.sidebar = false;
@@ -58,7 +69,12 @@ const ui = {
 
 // target VFO for screens/FUNC: the band whose mode box was touched, else the selected one
 const V = () => ui.target ?? s.vs;
-const side = (v = V()) => (v ? 'SUB' : 'MAIN');
+const side = (v = V()) => (IS991 ? (v ? 'VFO-B' : 'VFO-A') : v ? 'SUB' : 'MAIN');
+// CAT rate setting, kept per radio (the FT-991A goes up to 38400 bps, the FTX-1 to 115200)
+const CATBAUD = IS991 ? 'catBaud991' : 'catBaud';
+// local band stack (used without CAT BS); kept per radio, as the band codes differ
+const BSTACK = IS991 ? 'bandStack991' : 'bandStack';
+cfg[BSTACK] ||= {};
 const pct255 = (v) => `${Math.round(v / 2.55)}`;
 const signed = (v, unit) => `${v > 0 ? '+' : ''}${v}${unit}`;
 
@@ -83,10 +99,10 @@ const PARAMS = {
     min: () => radio.powerRange().min, max: () => radio.powerRange().max, step: () => radio.powerRange().step, fmt: (v) => `${v}W`,
   },
   mic: { name: 'MIC GAIN', get: () => s.mic, set: (v) => radio.setMic(v), min: 0, max: 100, step: 1, fmt: String },
-  width: { name: () => `WIDTH ${side()}`, get: () => s.width[V()], set: (v) => radio.setWidth(V(), v), min: 0, max: () => widthMax(s.mode[V()]), step: 1, fmt: (v) => widthText(s.mode[V()], v) },
+  width: { name: () => `WIDTH ${side()}`, get: () => s.width[V()], set: (v) => radio.setWidth(V(), v), min: () => widthMin(s.mode[V()], s.nar[V()]), max: () => widthMax(s.mode[V()], s.nar[V()]), step: 1, fmt: (v) => widthText(s.mode[V()], v, s.nar[V()]) },
   shift: { name: () => `SHIFT ${side()}`, get: () => s.shift[V()], set: (v) => radio.setShift(V(), true, v), min: -1200, max: 1200, step: 20, fmt: (v) => signed(v, 'Hz') },
   nb: { name: () => `NB LEVEL ${side()}`, get: () => s.nb[V()], set: (v) => radio.setNB(V(), v), min: 0, max: 10, step: 1, fmt: (v) => (v ? String(v) : 'OFF') },
-  nr: { name: () => `DNR LEVEL ${side()}`, get: () => s.nr[V()], set: (v) => radio.setNR(V(), v), min: 0, max: 10, step: 1, fmt: (v) => (v ? String(v) : 'OFF') },
+  nr: { name: () => `DNR LEVEL ${side()}`, get: () => s.nr[V()], set: (v) => radio.setNR(V(), v), min: 0, max: radio.nrMax ?? 10, step: 1, fmt: (v) => (v ? String(v) : 'OFF') },
   contour: { name: () => `CONTOUR ${side()}`, get: () => s.contourHz[V()], set: (v) => radio.setContourHz(V(), v), min: 10, max: 3200, step: 20, fmt: (v) => `${v}Hz` },
   apf: { name: () => `APF ${side()}`, get: () => s.apfOfs[V()], set: (v) => radio.setAPFOffset(V(), v), min: -250, max: 250, step: 10, fmt: (v) => signed(v, 'Hz') },
   notch: { name: () => `NOTCH ${side()}`, get: () => s.notchHz[V()], set: (v) => radio.setNotchHz(V(), v), min: 10, max: 3200, step: 10, fmt: (v) => `${v}Hz` },
@@ -102,10 +118,15 @@ const PARAMS = {
   dimmer: { name: 'DIMMER', get: () => s.dim[1], set: (v) => radio.setDim(1, v), min: 0, max: 20, step: 1, fmt: String },
   proc: { name: 'PROC LEVEL', get: () => s.proc, set: (v) => radio.setProc(v), min: 0, max: 100, step: 1, fmt: (v) => (v ? String(v) : 'OFF') },
   amc: { name: 'AMC LEVEL', get: () => s.amc, set: (v) => radio.setAmc(v), min: 1, max: 100, step: 1, fmt: String },
-  voxDelay: { name: 'VOX DELAY', get: () => s.voxDelay, set: (v) => radio.setVoxDelay(v), min: 0, max: 33, step: 1, fmt: (v) => `${delayMs(v)}ms` },
+  // FTX-1: a 00-33 code; FT-991A: milliseconds (VD / SD 0030-3000)
+  voxDelay: IS991
+    ? { name: 'VOX DELAY', get: () => s.voxDelay, set: (v) => radio.setVoxDelay(v), min: 30, max: 3000, step: 10, fmt: (v) => `${v}ms` }
+    : { name: 'VOX DELAY', get: () => s.voxDelay, set: (v) => radio.setVoxDelay(v), min: 0, max: 33, step: 1, fmt: (v) => `${delayMs(v)}ms` },
   tone: { name: () => `TONE FREQ ${side()}`, get: () => s.tone[V()], set: (v) => radio.setTone(V(), v), min: 0, max: 49, step: 1, fmt: (v) => `${CTCSS[v].toFixed(1)}Hz` },
   dcs: { name: () => `DCS ${side()}`, get: () => s.dcs[V()], set: (v) => radio.setDcs(V(), v), min: 0, max: 103, step: 1, fmt: (v) => DCS[v] },
-  bkDelay: { name: 'BK-DELAY', get: () => s.bkDelay, set: (v) => radio.setBkDelay(v), min: 0, max: 33, step: 1, fmt: (v) => `${delayMs(v)}ms` },
+  bkDelay: IS991
+    ? { name: 'BK-DELAY', get: () => s.bkDelay, set: (v) => radio.setBkDelay(v), min: 30, max: 3000, step: 10, fmt: (v) => `${v}ms` }
+    : { name: 'BK-DELAY', get: () => s.bkDelay, set: (v) => radio.setBkDelay(v), min: 0, max: 33, step: 1, fmt: (v) => `${delayMs(v)}ms` },
   clar: {
     name: () => `CLAR ${side()}`, get: () => s.clarOfs[V()], min: -9999, max: 9999, step: 10, fmt: (v) => signed(v, 'Hz'),
     set: (v) => {
@@ -143,11 +164,17 @@ radio.addEventListener('change', () => {
   if (PARAM_OF_SF[s.sf]) { cfg.func = PARAM_OF_SF[s.sf]; ui.funcRadioOnly = false; save(); }
   else if (SF_NAME[s.sf]) ui.funcRadioOnly = true;
 });
-const funcName = () => (radio.connected && ui.funcRadioOnly ? SF_NAME[s.sf] : val(PARAMS[cfg.func].name).replace(/ (MAIN|SUB)$/, ''));
+// FT-991A: the MULTI knob's functions as its screen names them (manual p.22), and the ones it can take
+const MULTI_NAME = { power: 'RF-P', mic: 'MIC-G', nb: 'NB-L', shift: 'SHIFT', width: 'WIDTH', notch: 'NOTCH', contour: 'CONT', nr: 'DNR',
+  proc: 'PROC', moni: 'MONI', ks: 'SPEED', apf: 'APF', kp: 'PITCH', sql: 'SQL', tone: 'TONE', dcs: 'DCS', clar: 'CLAR',
+  voxGain: 'VOX-G', voxDelay: 'VOX-D', bkDelay: 'BK-D' };
+if (IS991 && !MULTI_NAME[cfg.func]) cfg.func = 'power';
+const funcName = () => (IS991 ? MULTI_NAME[cfg.func]
+  : radio.connected && ui.funcRadioOnly ? SF_NAME[s.sf] : val(PARAMS[cfg.func].name).replace(/ (MAIN|SUB)$/, ''));
 function assignFunc(key) {
   cfg.func = key;
   ui.funcRadioOnly = false;
-  if (SF_OF_PARAM[key] && radio.connected) { radio.setFuncKnob(SF_OF_PARAM[key]); ui.sfSeen = SF_OF_PARAM[key]; }
+  if (!IS991 && SF_OF_PARAM[key] && radio.connected) { radio.setFuncKnob(SF_OF_PARAM[key]); ui.sfSeen = SF_OF_PARAM[key]; }
   save();
   popup(val(PARAMS[key].name), paramText(key), paramFrac(key));
   render();
@@ -167,10 +194,10 @@ function popup(label, value, frac) {
 // ---------------- band handling ----------------
 function gotoBand(b, v = V()) {
   const cur = bandOf(s.freq[v]);
-  if (cur.code !== 11) cfg.bandStack[cur.code] = { f: s.freq[v], m: s.mode[v] };
+  if (!cur.gen) cfg[BSTACK][cur.code] = { f: s.freq[v], m: s.mode[v] };
   save();
   const local = () => {
-    const st = cfg.bandStack[b.code] || { f: b.def, m: b.mode };
+    const st = cfg[BSTACK][b.code] || { f: b.def, m: b.mode };
     if (!st.f) return;
     radio.setFreq(v, st.f);
     if (st.m) radio.setMode(v, st.m);
@@ -178,11 +205,11 @@ function gotoBand(b, v = V()) {
   if (!radio.connected) { local(); return; }
   radio.bandSelect(v, b.code);
   // firmware without BS support: fall back to the local band stack
-  setTimeout(() => { if (bandOf(s.freq[v]).code !== b.code && b.code !== 11) local(); }, 800);
+  setTimeout(() => { if (bandOf(s.freq[v]).code !== b.code && !b.gen) local(); }, 800);
 }
 function bandStep(up, v = V()) {
   if (radio.connected) { radio.bandStep(v, up); return; }
-  const ham = BANDS.filter((b) => b.code !== 11 && b.code !== 12);
+  const ham = BANDS.filter((b) => b.ham);
   const i = ham.findIndex((b) => b.code === bandOf(s.freq[v]).code);
   gotoBand(ham[(i + (up ? 1 : -1) + ham.length) % ham.length], v);
 }
@@ -196,7 +223,7 @@ const isSplit = () => s.ft !== s.vs;
 function toggleSplit() { radio.setTxVFO(isSplit() ? s.vs : 1 - s.vs); }
 const onOff = (b) => (b ? 'ON' : 'OFF');
 
-const METERS = { 5: 'PO', 3: 'COMP', 4: 'ALC', 8: 'VDD', 7: 'ID', 6: 'SWR' };
+const METERS = IS991 ? { 5: 'PO', 4: 'ALC', 6: 'SWR', 3: 'COMP', 7: 'ID' } : { 5: 'PO', 3: 'COMP', 4: 'ALC', 8: 'VDD', 7: 'ID', 6: 'SWR' };
 // MS P1/P2 codes <-> RM meter numbers
 const MS_TO_RM = { 0: 5, 1: 3, 2: 4, 3: 8, 4: 7, 5: 6 };
 const RM_TO_MS = Object.fromEntries(Object.entries(MS_TO_RM).map(([m, r]) => [r, m]));
@@ -221,9 +248,74 @@ const SC_SPEED = ['SLOW1', 'SLOW2', 'FAST1', 'FAST2', 'FAST3', 'STOP'];
 
 const RPT = ['SIMPLEX', '+', '−', 'ARS'];
 const SQL_TYPE = ['OFF', 'ENC', 'TSQ', 'DCS', 'PR FREQ', 'REV TONE'];
+// FT-991A CT P2: 0 OFF 1 CTCSS ENC/DEC 2 CTCSS ENC 3 DCS ENC/DEC 4 DCS ENC
+const SQL_TYPE_991 = ['OFF', 'TSQ', 'ENC', 'DCS', 'DCS ENC'];
 const FM_STEP = ['5k', '6.25k', '10k', '12.5k', '20k', '25k'];
 const CTCSS = [67.0, 69.3, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5, 94.8, 97.4, 100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3, 131.8, 136.5, 141.3, 146.2, 151.4, 156.7, 159.8, 162.2, 165.5, 167.9, 171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5, 203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1];
 const DCS = ['023', '025', '026', '031', '032', '036', '043', '047', '051', '053', '054', '065', '071', '072', '073', '074', '114', '115', '116', '122', '125', '131', '132', '134', '143', '145', '152', '155', '156', '162', '165', '172', '174', '205', '212', '223', '225', '226', '243', '244', '245', '246', '251', '252', '255', '261', '263', '265', '266', '271', '274', '306', '311', '315', '325', '331', '332', '343', '346', '351', '356', '364', '365', '371', '411', '412', '413', '423', '431', '432', '445', '446', '452', '454', '455', '462', '464', '465', '466', '503', '506', '516', '523', '526', '532', '546', '565', '606', '612', '624', '627', '631', '632', '654', '662', '664', '703', '712', '723', '731', '732', '734', '743', '754'];
+
+// FT-991A [F] key: the function menu over the screen (manual p.23, 43): six touch keys per page with BACK / FWD,
+// label above and the setting below. Keys that pick a MULTI knob function (as on the radio) also switch on a tap.
+const F991_PAGES = () => [
+  [
+    { label: 'NAR/WIDE', value: () => `${s.nar[0] ? 'N' : 'W'} ${widthText(s.mode[0], s.width[0], s.nar[0])}`, on: () => s.nar[0], act: () => radio.setNarrow(0, !s.nar[0]), func: 'width' },
+    { label: 'NB', value: () => (s.nb[0] ? `ON ${s.nb[0]}` : 'OFF'), on: () => s.nb[0] > 0, act: () => radio.setNB(0, s.nb[0] ? 0 : (ui.lastNb || 5)), func: 'nb' },
+    { label: 'IPO', value: () => PREAMP_HF[preampVal(0)], act: () => cyclePreamp(0) },
+    { label: '5/10Hz', value: () => `${cfg.dial991 || 10}Hz`, act: () => { cfg.dial991 = (cfg.dial991 || 10) === 10 ? 5 : 10; save(); } },
+    { label: 'ATT', value: () => onOff(s.att), on: () => s.att, act: () => radio.setAtt(!s.att) },
+    { label: 'AGC', value: () => AGC[s.agc[0]], act: () => radio.setAGC(0, (s.agc[0] + 1) % 5) },
+  ],
+  [
+    { label: 'DNR', value: () => (s.nr[0] ? `ON ${s.nr[0]}` : 'OFF'), on: () => s.nr[0] > 0, act: () => radio.setNR(0, s.nr[0] ? 0 : (ui.lastNr || 8)), func: 'nr' },
+    { label: 'DNF', value: () => onOff(s.bc[0]), on: () => s.bc[0], act: () => radio.setBeatCancel(0, !s.bc[0]) },
+    { label: 'NOTCH', value: () => (s.notch[0] ? `${s.notchHz[0]}Hz` : 'OFF'), on: () => s.notch[0], act: () => radio.setNotch(0, !s.notch[0]), func: 'notch' },
+    { label: 'CONT', value: () => (s.contour[0] ? `${s.contourHz[0]}Hz` : 'OFF'), on: () => s.contour[0], act: () => radio.setContour(0, !s.contour[0]), func: 'contour' },
+    { label: 'APF', value: () => (s.apf[0] ? signed(s.apfOfs[0], 'Hz') : 'OFF'), on: () => s.apf[0], act: () => radio.setAPF(0, !s.apf[0]), func: 'apf' },
+    { label: 'MONI', value: () => (s.moniOn ? String(s.moni) : 'OFF'), on: () => s.moniOn, act: () => radio.setMonitorOn(!s.moniOn), func: 'moni' },
+  ],
+  [
+    { label: 'WIDTH', value: () => widthText(s.mode[0], s.width[0], s.nar[0]), func: 'width' },
+    { label: 'SHIFT', value: () => (s.shiftOn[0] ? signed(s.shift[0], 'Hz') : 'OFF'), on: () => s.shiftOn[0], act: () => radio.setShift(0, !s.shiftOn[0], s.shift[0]), func: 'shift' },
+    { label: 'PROC', value: () => (s.procOn ? String(s.proc) : 'OFF'), on: () => s.procOn, act: () => radio.setProcOn(!s.procOn), func: 'proc' },
+    { label: 'MIC-EQ', value: () => onOff(s.micEq), on: () => s.micEq, act: () => radio.setMicEq(!s.micEq) },
+    { label: 'VOX', value: () => (s.vox ? String(s.voxGain) : 'OFF'), on: () => s.vox, act: () => radio.setVox(!s.vox), func: 'voxGain' },
+    { label: 'MOX', value: () => onOff(s.mox), on: () => s.mox, act: () => radio.setMox(!s.mox) },
+  ],
+  [
+    { label: 'KEYER', value: () => onOff(s.keyer), on: () => s.keyer, act: () => radio.setKeyer(!s.keyer) },
+    { label: 'BK-IN', value: () => (s.bkin ? `${s.bkDelay}ms` : 'OFF'), on: () => s.bkin, act: () => radio.setBreakIn(!s.bkin), func: 'bkDelay' },
+    { label: 'SPOT', value: () => onOff(s.spot), on: () => s.spot, act: () => radio.setSpot(!s.spot) },
+    { label: 'ZIN', act: () => radio.zeroIn(0) },
+    { label: 'SPEED', value: () => `${s.ks}wpm`, func: 'ks' },
+    { label: 'PITCH', value: () => `${300 + s.kp * 10}Hz`, func: 'kp' },
+  ],
+  [
+    { label: 'RPT', value: () => RPT[s.os[0]] || 'SIMPLEX', act: () => radio.setRptShift(0, (s.os[0] + 1) % 3) },
+    { label: 'TONE/DCS', value: () => SQL_TYPE_991[s.ct[0]] || 'OFF', act: () => radio.setSqlType(0, (s.ct[0] + 1) % 5) },
+    { label: 'TONE', value: () => `${CTCSS[s.tone[0]]?.toFixed(1)}Hz`, func: 'tone' },
+    { label: 'DCS', value: () => DCS[s.dcs[0]], func: 'dcs' },
+    { label: 'SQL', value: () => pct255(s.sql[0]), func: 'sql' },
+    { label: 'SCAN', value: () => onOff(s.scan), on: () => s.scan, act: () => radio.setScan(!s.scan) },
+  ],
+  [
+    { label: 'MESSAGE', act: () => openPop('MESSAGE') },
+    { label: 'PLAY', act: () => openPop('PLAY') },
+    { label: 'REC', act: () => openPop('RECORD') },
+    { label: 'MCH', na: true },
+    { label: 'GRP', na: true },
+    { label: 'MENU', value: () => 'SETUP', act: () => { closePop(); openSettings(0); } },
+  ],
+];
+function F991_SCREENS() {
+  const pages = F991_PAGES(), n = pages.length;
+  return Object.fromEntries(pages.map((keys, i) => [`F ${i + 1}/${n}`, {
+    f991: true,
+    items: () => [...keys.slice(0, 4),
+      { label: 'BACK', nav: '◀', act: () => openPop(`F ${(i + n - 1) % n + 1}/${n}`) },
+      ...keys.slice(4),
+      { label: 'FWD', nav: '▶', act: () => openPop(`F ${(i + 1) % n + 1}/${n}`) }],
+  }]));
+}
 
 const SCREENS = {
   // [FUNC] knob press: the radio's three function pages, laid out key for key as in the operation manual
@@ -306,6 +398,7 @@ const SCREENS = {
       { label: 'EXTENSION', value: () => 'SETTING', setting: true, act: () => { closePop(); openSettings(4); } },
       { label: 'APRS', value: () => 'SETTING', setting: true, act: () => { closePop(); openSettings(5); } },
     ] },
+  ...(IS991 ? F991_SCREENS() : {}),
   MESSAGE: { items: () => [1, 2, 3, 4, 5].map((n) => ({ label: `M${n}`, value: () => 'PLAY', act: () => radio.playMessage(n) }))
     .concat([{ label: 'STOP', act: () => radio.playMessage(0) }]) },
   PLAY: { items: () => [1, 2, 3, 4, 5].map((n) => ({ label: `CH${n}`, value: () => 'PLAY', act: () => radio.playVoice(n) }))
@@ -320,16 +413,19 @@ const SCREENS = {
   },
   MODE: {
     key: () => MODE_NAME[s.mode[V()]] || '---',
-    items: () => MODES.map((m) => ({ label: m.name, cur: () => s.mode[V()] === m.code, act: () => radio.setMode(V(), m.code), close: true })),
+    items: () => MODES.map((m) => ({
+      label: m.name, cur: () => s.mode[V()] === m.code, close: true,
+      act: () => { if (radio.setMode(V(), m.code) === false) toast('VFO-B のモードは A/B キーで VFO-A と入れ替えてから変えてください'); },
+    })),
   },
   BAND: {
-    key: () => bandOf(s.freq[V()]).label + (bandOf(s.freq[V()]).code < 11 || bandOf(s.freq[V()]).code > 12 ? 'M' : ''),
+    key: () => bandOf(s.freq[V()]).label + (bandOf(s.freq[V()]).ham ? 'M' : ''),
     items: () => [
       ...BANDS.map((b) => ({ label: b.label, value: () => b.name, cur: () => bandOf(s.freq[V()]).code === b.code, act: () => gotoBand(b), close: true })),
     ],
   },
   FILTER: {
-    key: () => `W ${widthText(s.mode[V()], s.width[V()])}`,
+    key: () => `W ${widthText(s.mode[V()], s.width[V()], s.nar[V()])}`,
     items: () => [
       { label: 'WIDTH', func: 'width' },
       { label: 'SHIFT', func: 'shift', on: () => s.shiftOn[V()], act: () => radio.setShift(V(), !s.shiftOn[V()], s.shift[V()]) },
@@ -357,6 +453,7 @@ function openPop(name, target = null) {
   const grid = $('#popGrid');
   grid.innerHTML = '';
   $('#pop').classList.toggle('fmenu', !!SCREENS[name].fmenu);
+  $('#pop').classList.toggle('f991', !!SCREENS[name].f991);
   popItems = SCREENS[name].items().map((it) => {
     if (it.blank) { grid.appendChild(document.createElement('i')); return null; }
     if (it.section) {
@@ -404,7 +501,15 @@ function updatePop() {
 // bottom touch keys of the scope screen (manual p.28-30, product photo):
 // D-MODE / 3DSS / SPAN / SPEED drive the radio's own scope over CAT (SS); MULTI shows/hides this app's AF-FFT;
 // SCOPE MAIN/SUB follows the operated side (the CAT protocol has no scope-side command).
-const SOFT_KEYS = [
+// FT-991A: the four keys along the bottom of its screen (manual p.22-23; METER / RF PWR / MIC GAIN as shipped; the fourth
+// is SWEEP on the radio, which starts its own scope sweep and has no CAT command, so here it shows / hides the AF-FFT)
+const SOFT_KEYS_991 = [
+  { name: 'METER', key: () => METERS[cfg.meterSel], act: () => { const k = Object.keys(METERS).map(Number); setMeterSel(k[(k.indexOf(cfg.meterSel) + 1) % k.length]); } },
+  { name: 'RF PWR', key: () => `${s.power}W`, act: () => assignFunc('power'), func: 'power' },
+  { name: 'MIC GAIN', key: () => String(s.mic), act: () => assignFunc('mic'), func: 'mic' },
+  { name: 'AF-FFT', key: () => (cfg.afFft ? 'ON' : 'OFF'), act: () => { cfg.afFft = !cfg.afFft; save(); } },
+];
+const SOFT_KEYS = IS991 ? SOFT_KEYS_991 : [
   { name: 'D-MODE', key: () => SC_DMODE[scopeDmode()], act: () => setScopeMode(scopeType(), (scopeDmode() + 1) % 3) },
   { name: () => scopeType(), key: () => '', act: () => setScopeMode(scopeType() === '3DSS' ? 'W/F' : '3DSS', scopeDmode()) },
   { name: 'MULTI', key: () => (cfg.afFft ? 'AF-FFT' : ''), act: () => { cfg.afFft = !cfg.afFft; save(); } },
@@ -425,13 +530,20 @@ function setupSoftbar() {
   });
   $('#popClose').addEventListener('click', closePop);
   // touching the filter display opens the filter functions (manual p.23)
-  for (let v = 0; v < 2; v++) $(`#filt${v}`).addEventListener('click', () => openPop('FILTER', v));
+  if (!IS991) for (let v = 0; v < 2; v++) $(`#filt${v}`).addEventListener('click', () => openPop('FILTER', v));
 }
 
 // ---------------- bands: frequency, tags, receiver settings ----------------
 const lastFreqHtml = ['', ''];
 function freqHtml(hz) {
   const str = String(hz).padStart(9, '0');
+  if (IS991) {
+    // FT-991A: MHz.kHz and the 100 / 10 Hz digits small, no 1 Hz digit ("14.195 00"); plain characters in the screen font
+    const d = (i) => `<span class="d" data-p="${10 ** (8 - i)}">${str[i]}</span>`;
+    let mhz = '';
+    for (let i = 0; i < 3; i++) if (mhz || str[i] !== '0' || i === 2) mhz += d(i);
+    return `${mhz}<span class="dot">.</span>${d(3)}${d(4)}${d(5)}<span class="sm">${d(6)}${d(7)}</span>`;
+  }
   // glyphs are CSS masks (js/digits.js); the spans stay empty so each one is exactly one glyph box
   const d = (i, cls = '') => `<span class="d${cls}" data-g="${str[i]}" data-p="${10 ** (8 - i)}"></span>`;
   let mhz = '';
@@ -461,8 +573,10 @@ function fitFreq() {
       let k = s.freq[+el.id.slice(-1)] >= 100e6 ? 0.8 : 1;
       if (el.scrollWidth * k > avail) k = avail / el.scrollWidth;
       if (k < 1) el.style.fontSize = `${parseFloat(getComputedStyle(el).fontSize) * k}px`;
-    } else if (el.scrollWidth > avail) {
-      el.style.fontSize = `${(parseFloat(getComputedStyle(el).fontSize) * avail) / el.scrollWidth * 0.98}px`;
+    } else {
+      // (FT-991A: the figures are drawn 1.2x wider, css .lcd991 .freq)
+      const w = el.scrollWidth * (IS991 ? 1.2 : 1);
+      if (w > avail) el.style.fontSize = `${(parseFloat(getComputedStyle(el).fontSize) * avail) / w * 0.98}px`;
     }
   }
 }
@@ -490,10 +604,10 @@ function setupBands() {
       radio.setFreq(v, s.freq[v] + n * +d.dataset.p);
     }, { passive: false });
     band.querySelector('.b-mode').addEventListener('click', () => openPop('MODE', v));
-    band.querySelector('.b-tags').addEventListener('click', () => { if (s.vs !== v) radio.selectVFO(v); });
-    $(`#meter${v}`).addEventListener('click', () => openPop('METER'));
+    band.querySelector('.b-tags')?.addEventListener('click', () => { if (s.vs !== v) radio.selectVFO(v); });
+    $(`#meter${v}`)?.addEventListener('click', () => openPop('METER'));
     const rx = $(`#rx${v}`);
-    RX_TILES.forEach((t) => {
+    if (rx) RX_TILES.forEach((t) => {
       const el = document.createElement('button');
       el.className = 'rxt';
       el.innerHTML = '<b></b><span></span>';
@@ -572,7 +686,19 @@ const TX_SCALES = {
   7: { name: 'ID', ticks: [['0', 0], ['25', 64], ['50', 128], ['75', 192], ['100', 255]], unit: '%' },
   8: { name: 'VDD', ticks: [['0', 0], ['5', 64], ['10', 128], ['15', 192], ['20', 255]], unit: 'V' },
 };
+// FT-991A bar meter scales (manual p.22): S 1-9 / +20 +40 +60dB, PO 0 10 50 100 150W
+// (4th field: the figure's place across the meter, measured on the manual's screen picture)
+const S_BAR = { name: 'S', hot: 130, unit: 'dB', ticks: [['1', 12, 0, 0.193], ['3', 40, 0, 0.27], ['5', 65, 0, 0.345], ['7', 95, 0, 0.418], ['9', 130, 0, 0.493],
+  ['+20', 172, 0, 0.599], ['+40', 220, 0, 0.709], ['+60', 255, 0, 0.808]] };
+const PO_BAR = { name: 'PO', unit: 'W', ticks: [['0', 0, 0, 0.153], ['10', poRaw(10, 150), 0, 0.324], ['50', poRaw(50, 150), 0, 0.547],
+  ['100', poRaw(100, 150), 0, 0.69], ['150', 255, 0, 0.833]] };
 function drawMeters() {
+  if (IS991) {
+    const m = meters[0];
+    m.configure({ top: S_BAR, bottom: cfg.meterSel === 5 ? PO_BAR : TX_SCALES[cfg.meterSel], reading: s.tx ? 'bottom' : 'top' });
+    m.set(s.tx ? s.meters[cfg.meterSel] : s.smeter[0]);
+    return;
+  }
   const bottom = cfg.meterSel === 5 ? poScale() : TX_SCALES[cfg.meterSel];
   for (let v = 0; v < 2; v++) {
     const m = meters[v];
@@ -590,7 +716,7 @@ function drawMeters() {
 
 // ---------------- filter function display ----------------
 function drawFilters() {
-  for (let v = 0; v < 2; v++) {
+  for (let v = 0; v < filters.length; v++) {
     const mode = s.mode[v];
     const w = widthHz(mode, s.width[v]);
     const sh = s.shiftOn[v] ? s.shift[v] : 0;
@@ -615,7 +741,45 @@ function drawFilters() {
 // ---------------- knobs & dials ----------------
 const afKnobs = [];
 function knobMode(v) { return ui.knMode[v] === 'af' ? 'af' : isFM(s.mode[v]) || s.mode[v] === '5' || s.mode[v] === 'D' ? 'sql' : 'rf'; }
+// FT-991A: AF GAIN, RF GAIN (SQL is a MULTI function there), CLAR/VFO-B (VFO-B in split, else the clarifier), MULTI
+function setupKnobs991() {
+  const afTurn = (n) => {
+    if (cfg.spkMute) {
+      cfg.rxVol = clamp(Math.round((cfg.rxVol + n * 0.03) * 100) / 100, 0, 2);
+      $('#rxVol').value = cfg.rxVol; audio.setRxVolume(cfg.rxVol); save();
+      popup('PC VOLUME', `${Math.round(cfg.rxVol * 50)}%`, cfg.rxVol / 2);
+      return;
+    }
+    const nv = clamp(s.af[0] + n * 4, 0, 255);
+    radio.setAF(0, nv);
+    popup('AF GAIN', pct255(nv), nv / 255);
+  };
+  // (the FT-991A's knobs turn by circling them)
+  afKnobs.push({ k: new Knob($('#knAF0'), { onTurn: afTurn, angular: true, accel: true }), v: 0, kind: 'af' });
+  afKnobs.push({ k: new Knob($('#knRF'), {
+    angular: true, accel: true,
+    onTurn: (n) => { const nv = clamp(s.rf[0] + n * 4, 0, 255); radio.setRF(0, nv); popup('RF GAIN', pct255(nv), nv / 255); },
+  }), v: 0, kind: 'rf' });
+  const multi = new Knob($('#knFunc'), {
+    angular: true, accel: true,
+    onTurn: (n) => {
+      // menu: MULTI moves through the items; after SELECT it changes the value (as on the radio)
+      if (!$('#exm').hidden && exSel) { if (ui.exEdit) exAdjust(n); else exMove(n); multi.showFree(); return; }
+      adjust(cfg.func, n); multi.showFree();
+    },
+  });
+  const cv = new Knob($('#knSubDial'), {
+    angular: true, degPerStep: 10, accel: true,
+    onTurn: (n) => {
+      if (isSplit()) tune(n, 1);
+      else adjust('clar', n);
+      cv.showFree();
+    },
+  });
+  ui.dial = new Dial($('#dial'), { stepsPerRev: +cfg.dialRes, onStep: (n) => tune(n, 0) });
+}
 function setupKnobs() {
+  if (IS991) { setupKnobs991(); return; }
   for (let v = 0; v < 2; v++) {
     const k = new Knob($(`#knAF${v}`), {
       onTurn: (n) => {
@@ -668,6 +832,8 @@ function setupKnobs() {
 // described in the manuals; it is taken as 5 kHz below 60 MHz and 20 kHz above (Japanese channel spacing).
 const DIAL_HZ = [5, 10, 20], FM_DIAL_HZ = [5000, 6250, 10000, 12500, 20000, 25000];
 function modeStep(mode, v = 0) {
+  // FT-991A (manual p.21): 5 / 10 Hz (the function menu's 5/10Hz), FM / C4FM / DATA-FM 100 Hz; FAST is 100 Hz / 1 kHz
+  if (IS991) return isFM(mode) ? 100 : cfg.dial991 || 10;
   if (['1', '2', '3', '7'].includes(mode)) return DIAL_HZ[+(s.ex['030601'] ?? 2)] || 20;          // SSB / CW
   if (['6', '9', '8', 'C', 'E'].includes(mode)) return DIAL_HZ[+(s.ex['030602'] ?? 1)] || 10;     // RTTY / DATA / PSK
   if (isFM(mode)) return FM_DIAL_HZ[+(s.ex['030603'] ?? 6)] || (s.freq[v] < 60e6 ? 5000 : 20000); // FM
@@ -677,13 +843,13 @@ function modeStep(mode, v = 0) {
 function curStep(v = 0) {
   const base = cfg.step === 'auto' ? modeStep(s.mode[v], v) : cfg.step;
   if (ui.fine) return isFM(s.mode[v]) || s.mode[v] === '5' || s.mode[v] === 'D' ? 10 : 1;
-  if (ui.fast) return base * 10;
+  if (ui.fast) return IS991 && cfg.step === 'auto' ? (isFM(s.mode[v]) ? 1000 : 100) : base * 10;
   return base;
 }
 function tune(n, v) {
   if (s.lock) { popup('LOCK', 'DIAL LOCK', 0); ui.dial.stop(); return; }
-  // with CLAR active the dial moves the clarifier offset instead of the frequency
-  if (v === 0 && (s.clarRx[0] || s.clarTx[0])) {
+  // with CLAR active the dial moves the clarifier offset instead of the frequency (FT-991A: CLAR/VFO-B knob does that)
+  if (!IS991 && v === 0 && (s.clarRx[0] || s.clarTx[0])) {
     radio.setClarOffset(0, s.clarOfs[0] + n * 10);
     popup('CLAR', signed(s.clarOfs[0], 'Hz'), (s.clarOfs[0] + 9999) / 19998);
     return;
@@ -798,6 +964,24 @@ const ACTIONS = {
     popup('DIAL STEP', cfg.step === 'auto' ? `AUTO (${stepText(modeStep(s.mode[0]))})` : stepText(cfg.step), STEPS.indexOf(cfg.step) / (STEPS.length - 1));
   },
   entry: () => openEntry(V()),
+  // FT-991A front panel (manual p.18-21)
+  ab: () => { radio.copyAtoB(); popup('A=B', 'VFO-A → VFO-B', 1); },
+  tune991: { press: () => radio.setTuner(!s.tuner), hold: () => { radio.tune(); popup('TUNE', 'AUTO TUNE', 1); } },
+  cs: () => toast('C.S（カスタムスイッチ）は CAT では操作できません'),
+  // TXW: listens on the transmit frequency while held
+  txw: { down: () => radio.setTxw(true), up: () => radio.setTxw(false) },
+  fast: () => radio.setFine(s.fn === 2 ? 0 : 2),
+  lock: () => radio.setLock(!s.lock),
+  clar991: {
+    press: () => { const on = s.clarRx[0] || s.clarTx[0]; radio.setClar(0, !on, false); },
+    hold: () => { radio.setClarOffset(0, 0); popup('CLAR', '0Hz', 0.5); },
+  },
+  am991: { press: () => toast('メモリーチェックは CAT では操作できません（長押しでメモリー書込）'), hold: () => { radio.memWrite(); popup('A▸M', 'MEMORY WRITE', 1); } },
+  split991: { press: toggleSplit, hold: () => { radio.quickSplit(); popup('SPLIT', 'QUICK SPLIT', 1); } },
+  fkey: { press: () => (SCREENS[ui.pop]?.f991 ? closePop() : openPop(Object.keys(SCREENS).find((k) => SCREENS[k].f991))), hold: () => toast('メモリーリストは CAT では表示できません') },
+  menu991: { press: () => { if ($('#exm').hidden) { closePop(); openSettings(0); } else closeSettings(); }, hold: () => toast('SETUP（MY CALL など）は CAT では操作できません') },
+  band991: () => (ui.pop === 'BAND' ? closePop() : openPop('BAND')),
+  mode991: () => (ui.pop === 'MODE' ? closePop() : openPop('MODE', 0)),
 };
 const stepText = (st) => (st >= 1000 ? `${st / 1000}kHz` : `${st}Hz`);
 
@@ -806,6 +990,12 @@ function setupKeys() {
     const a = ACTIONS[el.dataset.act];
     if (!a) return;
     if (typeof a === 'function') { el.addEventListener('click', () => { a(); render(); }); return; }
+    if (a.down) {
+      // momentary key: on while pressed
+      el.addEventListener('pointerdown', (e) => { el.setPointerCapture(e.pointerId); a.down(); render(); });
+      for (const t of ['pointerup', 'pointercancel']) el.addEventListener(t, () => { a.up(); render(); });
+      return;
+    }
     let timer = null, held = false;
     el.addEventListener('pointerdown', () => {
       held = false;
@@ -843,15 +1033,19 @@ function setupKeyboard() {
 }
 
 // ---------------- connection ----------------
+// the CAT port used last time (USB IDs, position among the radio's ports, rate), kept per radio
+const CATPORT = IS991 ? 'catPort991' : 'catPort';
 function onConnected(baud) {
   $('#btnConnect').classList.remove('connecting');
   if (!audio.rx) startRxAudio({ quiet: true });
-  // ID answer: 0840 (CAT manual 2512-D; 0800 in 2508-C)
-  const notFtx1 = s.id && !['0800', '0840'].includes(s.id);
-  toast(`CAT接続しました（${baud}bps${notFtx1 ? ` / ID ${s.id}: FTX-1ではない可能性` : ''}）`, notFtx1);
+  // (FT-991A: TX audio starts with POWER on as RX does; left off, the radio is keyed with no audio)
+  if (IS991 && !audio.tx) startTxAudio();
+  // ID answer: FTX-1 0840 (CAT manual 2512-D; 0800 in 2508-C); FT-991 0570 (CAT manual 1808-D), FT-991A 0670
+  const other = s.id && !(IS991 ? ['0570', '0670'] : ['0800', '0840']).includes(s.id);
+  toast(`CAT接続しました（${baud}bps${other ? ` / ID ${s.id}: ${MODEL_NAME}ではない可能性。SETUP の機種を確かめてください` : ''}）`, other);
   if (cfg.keyPortAuto) openKeyPortAuto();
   // the radio's dial steps, for STEP AUTO
-  for (const k of ['030601', '030602', '030603']) radio.send(`EX${k};`, { read: true });
+  if (!IS991) for (const k of ['030601', '030602', '030603']) radio.send(`EX${k};`, { read: true });
 }
 async function toggleConnect(e) {
   if (e?.shiftKey) ui.forcePick = true;
@@ -871,11 +1065,15 @@ async function toggleConnect(e) {
   if (!ui.forcePick) {
     try {
       const ports = await navigator.serial.getPorts();
-      const same = ports.filter((p) => { const i = p.getInfo(); return cfg.catPort && i.usbVendorId === cfg.catPort.vid && i.usbProductId === cfg.catPort.pid; });
-      const order = [same[cfg.catPort?.idx], ...same].filter((p, i, a) => p && a.indexOf(p) === i);
+      const last = cfg[CATPORT];
+      const same = ports.filter((p) => { const i = p.getInfo(); return last && i.usbVendorId === last.vid && i.usbProductId === last.pid; });
+      const order = [same[last?.idx], ...same].filter((p, i, a) => p && a.indexOf(p) === i);
+      // only the rate that worked last time, so a port that does not answer leads to the picker within a second or two
+      // (it has to open while Chrome still counts the click)
       for (const p of order) {
         try {
-          const baud = await radio.connect(p, cfg.catBaud);
+          const baud = await radio.connect(p, cfg[CATBAUD] === 'auto' && last.baud ? last.baud : cfg[CATBAUD]);
+          last.baud = baud; save();
           onConnected(baud);
           return;
         } catch {}
@@ -888,18 +1086,18 @@ async function toggleConnect(e) {
     port = await navigator.serial.requestPort();
   } catch { $('#btnConnect').classList.remove('connecting'); return; } // picker cancelled
   try {
-    const baud = await radio.connect(port, cfg.catBaud);
+    const baud = await radio.connect(port, cfg[CATBAUD]);
     const info = port.getInfo();
     const same = (await navigator.serial.getPorts()).filter((p) => { const i = p.getInfo(); return i.usbVendorId === info.usbVendorId && i.usbProductId === info.usbProductId; });
-    cfg.catPort = { vid: info.usbVendorId, pid: info.usbProductId, idx: Math.max(0, same.indexOf(port)) };
+    cfg[CATPORT] = { vid: info.usbVendorId, pid: info.usbProductId, idx: Math.max(0, same.indexOf(port)), baud };
     save();
     onConnected(baud);
     return;
   } catch (e) {
     if (e.code === 'NO_REPLY') {
-      toast(cfg.catBaud === 'auto'
-        ? 'このポートはCATに応答しません。FTX-1のもう一方のシリアルポートを選んでください'
-        : `${cfg.catBaud}bpsで応答がありません。ボーレートを「自動」にするか、もう一方のポートを選んでください`, true);
+      toast(cfg[CATBAUD] === 'auto'
+        ? `このポートはCATに応答しません。${MODEL_NAME}のもう一方のシリアルポートを選んでください（受信した内容は CAT CONSOLE に出ています）`
+        : `${cfg[CATBAUD]}bpsで応答がありません。ボーレートを「自動」にするか、もう一方のポートを選んでください`, true);
     } else {
       toast(`ポートを開けません: ${e.message}（他のアプリが使用中の可能性）`, true);
     }
@@ -1011,14 +1209,15 @@ function setupConsole() {
 function setupCw() {
   // editor: sent text stays, locked and coloured, the rest is editable while sending; finished lines go to the log
   const editor = $('#cwText');
-  // keying: PC KEYING (EX020114: 1 RTS / 2 DTR) on the radio's second port (SETUP「CWキーイング」); null = ready,
-  // otherwise why it cannot key
+  // keying: PC KEYING (FTX-1 EX020114: 1 RTS / 2 DTR; FT-991A EX060: 2 RTS / 3 DTR) on the radio's second port
+  // (SETUP「CWキーイング」); null = ready, otherwise why it cannot key
+  const PCK = IS991 ? { key: '060', rts: '2', dtr: '3', where: 'メニュー 060 PC KEYING' } : { key: '020114', rts: '1', dtr: '2', where: 'PC KEYING（CW SETTING → MODE CW）' };
   const keyProblem = () => {
-    const v = s.ex['020114'], line = v === '2' ? 'dtr' : v === '1' ? 'rts' : null;
+    const v = s.ex[PCK.key], line = v === PCK.dtr ? 'dtr' : v === PCK.rts ? 'rts' : null;
     if (!radio.connected) return 'CAT が接続されていません';
     if (!ui.pttLink?.isOpen) return 'SETUP の「CWキーイング」で 2 本目のポート（Standard COM Port）を開いてください';
     if (v == null) return '本体の PC KEYING を読み込み中です（少し待ってからもう一度）';
-    if (!line) return '本体の PC KEYING（CW SETTING → MODE CW）を DTR か RTS にしてください';
+    if (!line) return `本体の ${PCK.where} を DTR か RTS にしてください`;
     if (cfg.pttMethod === line) return `${line.toUpperCase()} は PTT に使っているのでキーイングに使えません（SETUP の PTT 方式を CAT に）`;
     return null;
   };
@@ -1026,7 +1225,10 @@ function setupCw() {
   // which of the two that is (after the radio restarts, CAT may well be on it); the line is unused on the other port
   const keyer = () => {
     if (keyProblem()) return null;
-    const sig = s.ex['020114'] === '2' ? 'dataTerminalReady' : 'requestToSend', links = [ui.pttLink, radio.link];
+    const sig = s.ex[PCK.key] === PCK.dtr ? 'dataTerminalReady' : 'requestToSend';
+    // (FT-991A: the CAT port's RTS is the CAT handshake of menu 033 and DTR on it garbles CAT, so keying stays on the
+    // second port)
+    const links = IS991 ? [ui.pttLink] : [ui.pttLink, radio.link];
     return async (on) => {
       const r = await Promise.allSettled(links.map((l) => l.setSignals({ [sig]: on })));
       if (r.every((x) => x.status === 'rejected')) throw r[0].reason;
@@ -1034,7 +1236,7 @@ function setupCw() {
   };
   const cw = new CwSender(radio, { editor, back: $('#cwBack'), log: $('#cwLog') }, keyer);
   // PC KEYING: read on connecting and again on each start
-  const readCwSettings = () => radio.send('EX020114;', { read: true });
+  const readCwSettings = () => radio.send(`EX${PCK.key};`, { read: true });
   radio.addEventListener('connection', () => { if (radio.connected) setTimeout(readCwSettings, 2000); });
   setInterval(() => {
     // shown only when it cannot send (hover for the reason)
@@ -1089,6 +1291,8 @@ function setupCw() {
 }
 
 // ---------------- audio ----------------
+// audio devices chosen in USB AUDIO, kept per radio (both radios may be connected to the PC)
+const AUDIO = Object.fromEntries(['rxIn', 'rxOut', 'txIn', 'txOut'].map((k) => [k, IS991 ? `${k}991` : k]));
 // explicit user choice (saved) wins; otherwise re-pick every time, since labels only appear after permission
 function fillSelect(sel, list, saved, pick) {
   sel.innerHTML = '';
@@ -1104,12 +1308,15 @@ function fillSelect(sel, list, saved, pick) {
 async function refreshDevices() {
   if (!navigator.mediaDevices?.enumerateDevices) return;
   const { inputs, outputs } = await audio.devices();
-  const radioDev = (l) => l.find(isRadioDevice);
+  // this radio's own device first (with both radios connected), then any radio's: on macOS the FT-991A is
+  // "USB Audio CODEC" and the FTX-1 "USB Audio Device" (on Windows both are "USB Audio CODEC")
+  const own = IS991 ? /USB Audio CODEC/i : /USB Audio Device|FTX/i;
+  const radioDev = (l) => l.find((d) => own.test(d.label)) || l.find(isRadioDevice);
   const pcDev = (l) => l.find((d) => d.deviceId === 'default') || l.find((d) => !isRadioDevice(d));
-  fillSelect($('#rxIn'), inputs, cfg.rxIn, radioDev);
-  fillSelect($('#rxOut'), outputs, cfg.rxOut, pcDev);
-  fillSelect($('#txIn'), inputs, cfg.txIn, pcDev);
-  fillSelect($('#txOut'), outputs, cfg.txOut, radioDev);
+  fillSelect($('#rxIn'), inputs, cfg[AUDIO.rxIn], radioDev);
+  fillSelect($('#rxOut'), outputs, cfg[AUDIO.rxOut], pcDev);
+  fillSelect($('#txIn'), inputs, cfg[AUDIO.txIn], pcDev);
+  fillSelect($('#txOut'), outputs, cfg[AUDIO.txOut], radioDev);
 }
 async function startRxAudio({ quiet = false } = {}) {
   try {
@@ -1120,7 +1327,7 @@ async function startRxAudio({ quiet = false } = {}) {
       await refreshDevices();
     }
     const sel = $('#rxIn').selectedOptions[0];
-    if (sel && !isRadioDevice({ label: sel.textContent }) && !cfg.rxIn) toast('FTX-1のオーディオデバイスが見つかりません。RX入力を選択してください', true);
+    if (sel && !isRadioDevice({ label: sel.textContent }) && !cfg[AUDIO.rxIn]) toast(`${MODEL_NAME}のオーディオデバイスが見つかりません。RX入力を選択してください`, true);
     await audio.startRx({ inputId: $('#rxIn').value, outputId: $('#rxOut').value, volume: +cfg.rxVol });
   } catch (e) {
     if (!quiet) toast(`RXオーディオ開始失敗: ${e.message}`, true);
@@ -1139,7 +1346,7 @@ function setupAudio() {
   $('#rxVol').value = cfg.rxVol;
   $('#txGain').value = cfg.txGain;
   $('#txGate').checked = cfg.txGate;
-  ['rxIn', 'rxOut', 'txIn', 'txOut'].forEach((id) => $(`#${id}`).addEventListener('change', (e) => { cfg[id] = e.target.value; save(); }));
+  ['rxIn', 'rxOut', 'txIn', 'txOut'].forEach((id) => $(`#${id}`).addEventListener('change', (e) => { cfg[AUDIO[id]] = e.target.value; save(); }));
 
   $('#btnRx').addEventListener('click', () => (audio.rx ? audio.stopRx() : startRxAudio()));
   $('#scope').addEventListener('click', () => { if (!audio.rx) startRxAudio(); });
@@ -1205,6 +1412,33 @@ function setupAudio() {
     filters.forEach((f) => f.setSource(audio.rxAnalyser, audio.rxSampleRate));
   });
   audio.addEventListener('devicechange', () => refreshDevices());
+  // FT-991A: after its USB audio went away and came back (cable pulled, radio switched off and on), audio that was
+  // running on it stays silent without an error (TX keeps playing into the old device): open it again on the new one
+  if (IS991) {
+    const codec = (l) => l.some((d) => /USB Audio CODEC/i.test(d.label));
+    let gone = null, rxWas = false, rxOffAt = 0;
+    audio.addEventListener('state', () => {
+      if (rxWas && !audio.rx) rxOffAt = performance.now();
+      rxWas = !!audio.rx;
+    });
+    audio.addEventListener('devicechange', async () => {
+      const { inputs, outputs } = await audio.devices();
+      if (!codec(inputs) || !codec(outputs)) {
+        // (RX ends by itself as its input disappears, just before this event)
+        if (!gone) gone = { tx: !!audio.tx, rx: !!audio.rx || performance.now() - rxOffAt < 5000 };
+        return;
+      }
+      if (!gone) return;
+      const was = gone;
+      gone = null;
+      if (!was.tx && !was.rx) return;
+      if (ui.ptt) await setPtt(false);
+      await refreshDevices();
+      if (was.tx) { await audio.stopTx(); await startTxAudio(); }
+      if (was.rx) await startRxAudio({ quiet: true });
+      toast(`${MODEL_NAME}のUSBオーディオがつなぎ直されたので、${[was.tx && 'TX', was.rx && 'RX'].filter(Boolean).join('/')}音声を開き直しました`);
+    });
+  }
   refreshDevices();
 
   const vu = (el, lv) => {
@@ -1231,7 +1465,25 @@ function setupSettings() {
       after?.();
     });
   };
-  bindSel('baud', 'catBaud', () => { if (radio.connected) toast('ボーレートは再接続後に反映されます'); });
+  // radio model: the page is built for one radio, so a change reloads it (the CAT link is closed first)
+  $('#model').value = IS991 ? 'ft991a' : 'ftx1';
+  $('#model').addEventListener('change', async (e) => {
+    cfg.model = e.target.value;
+    save();
+    if (radio.connected) { await setPtt(false); await radio.disconnect(); }
+    location.reload();
+  });
+  $$('.model-name').forEach((el) => { el.textContent = MODEL_NAME; });
+  if (IS991) {
+    // FT-991A: one CAT RATE (menu 031) up to 38400 bps; TX2 is an FTX-1 command
+    // the radio's CAT RATE is menu 031 (MENU screen), which reconnects by itself: no separate setting here
+    $('#radioBaudLabel').parentElement.hidden = true;
+    $('#baud').querySelector('option[value="115200"], option:last-child').remove();
+    if (![4800, 9600, 19200, 38400].includes(cfg[CATBAUD])) cfg[CATBAUD] = 'auto';
+    $('#pttMethod').querySelector('[value="cat2"]').remove();
+    if (cfg.pttMethod === 'cat2') cfg.pttMethod = 'cat1';
+  }
+  bindSel('baud', CATBAUD, () => { if (radio.connected) toast('ボーレートは再接続後に反映されます'); });
   bindSel('pttMethod', 'pttMethod');
   bindSel('dialRes', 'dialRes', () => { ui.dial.stepsPerRev = +cfg.dialRes; });
   bindSel('tot', 'tot');
@@ -1244,13 +1496,14 @@ function setupSettings() {
   $('#btnRadioBaud').addEventListener('click', async () => {
     const rate = +$('#radioBaud').value;
     if (!radio.connected) { toast('CATが接続されていません', true); return; }
-    if (!confirm(`本体の CAT-1 / CAT-2 ボーレートを ${rate}bps に変更して再接続します。よろしいですか？`)) return;
+    const which = IS991 ? 'CAT RATE（メニュー 031）' : 'CAT-1 / CAT-2 ボーレート';
+    if (!confirm(`本体の ${which} を ${rate}bps に変更して再接続します。よろしいですか？`)) return;
     try {
       await radio.setRadioBaud(rate);
-      cfg.catBaud = rate;
+      cfg[CATBAUD] = rate;
       $('#baud').value = String(rate);
       save();
-      toast(`本体の CAT-1 / CAT-2 を ${rate}bps にしました`);
+      toast(`本体の ${which} を ${rate}bps にしました`);
     } catch (e) {
       toast(`変更後の再接続に失敗しました: ${e.message}（POWER で接続し直してください）`, true);
     }
@@ -1311,6 +1564,8 @@ function setupDecoder() {
 // Groups on the left, the selected group's items on the right (as the radio's setting screens). Values are read with
 // EX P1P2P3; when a group is opened; an item is changed with the FUNC knob, the mouse wheel or a click on its value.
 let exMenu = null, exGroup = null, exSel = null;
+// FT-991A: one numbered list (001-153, shown with the numbers)
+const EXM = IS991 ? EX_MENUS_991 : EX_MENUS, EXD = IS991 ? EX_DEFAULTS_991 : EX_DEFAULTS;
 function exText(it, raw) {
   if (raw == null) return '…';
   if (it.t === 'na') return '—';
@@ -1343,8 +1598,21 @@ const exWheel = {}; // (one wheel state for all rows of the settings menu)
 function exFlush() {
   clearTimeout(exTimer);
   // (turned back to where it started: nothing to send)
-  if (exPending && exPending.v !== exPending.from) radio.setEx(exPending.key, exPending.v);
+  if (exPending && exPending.v !== exPending.from) sendEx(exPending.key, exPending.v);
   exPending = null;
+}
+// FT-991A menu 031 CAT RATE changes the rate of the port in use: the app reconnects at the new rate
+const BAUD_ITEM = IS991 ? '031' : null, BAUD_CODES = [4800, 9600, 19200, 38400];
+function sendEx(key, v) {
+  if (key !== BAUD_ITEM) { radio.setEx(key, v); return; }
+  const rate = BAUD_CODES[+v];
+  if (!rate) return;
+  radio.setRadioBaud(rate).then(() => {
+    if (cfg[CATPORT]) cfg[CATPORT].baud = rate;
+    if (cfg[CATBAUD] !== 'auto') cfg[CATBAUD] = rate;
+    save();
+    toast(`本体の CAT RATE を ${rate}bps にして、つなぎ直しました`);
+  }).catch((e) => toast(`CAT RATE 変更後の再接続に失敗しました: ${e.message}（⏻ で接続し直してください）`, true));
 }
 function exAdjust(n) {
   const { it, key } = exSel;
@@ -1355,16 +1623,37 @@ function exAdjust(n) {
   s.ex[key] = v;
   exPending = { key, v, from };
   clearTimeout(exTimer);
-  exTimer = setTimeout(exFlush, 400);
+  // (CAT RATE goes only on ENTER: each change reconnects)
+  if (key !== BAUD_ITEM) exTimer = setTimeout(exFlush, 400);
   drawSettings();
 }
 function openSettings(i) {
-  exMenu = EX_MENUS[i];
+  exMenu = EXM[i];
+  ui.exEdit = false;
+  ui.exRead = new Set();
+  if (IS991) {
+    // FT-991A: one list, 001-153, under the meter; the first item selected
+    const all = { name: 'MENU', key: '', items: exMenu.groups.flatMap((g) => g.items) };
+    exMenu = { name: 'MENU', groups: [all] };
+  }
   $('#exmTitle').textContent = exMenu.name;
   $('#exm').hidden = false;
   openExGroup(exMenu.groups[0]);
+  if (IS991) exMove(0);
 }
-function closeSettings() { $('#exm').hidden = true; exMenu = exGroup = exSel = null; render(); }
+function closeSettings() { exFlush(); ui.exEdit = false; $('#exm').hidden = true; exMenu = exGroup = exSel = null; render(); }
+// FT-991A menu: select the item n rows on, keep it in view, read the values around it
+function exMove(n) {
+  const items = exGroup.items;
+  const i = clamp((exSel ? items.indexOf(exSel.it) : 0) + n, 0, items.length - 1);
+  exSel = { it: items[i], key: exGroup.key + items[i].p };
+  $(`#exmItems [data-key="${exSel.key}"]`)?.scrollIntoView({ block: 'nearest' });
+  for (let j = Math.max(0, i - 1); j <= Math.min(items.length - 1, i + 3); j++) {
+    const k = exGroup.key + items[j].p;
+    if (items[j].t !== 'na' && radio.connected && !ui.exRead.has(k)) { ui.exRead.add(k); radio.send(`EX${k};`, { read: true }); }
+  }
+  drawSettings();
+}
 function openExGroup(g) {
   exGroup = g; exSel = null;
   const gl = $('#exmGroups');
@@ -1384,21 +1673,25 @@ function openExGroup(g) {
     const row = document.createElement('div');
     row.className = `exm-i${it.t === 'na' ? ' na' : ''}`;
     row.innerHTML = '<span class="n"></span><button class="v"></button>';
-    row.firstChild.textContent = it.name;
+    row.firstChild.textContent = IS991 ? `${it.p} ${it.name}` : it.name;
     row.dataset.key = key;
     const pick = () => { if (it.t === 'na') { toast(`${it.name} は CAT では操作できません`); return false; } exSel = { it, key }; drawSettings(); return true; };
-    row.addEventListener('click', pick);
+    row.addEventListener('click', () => { if (IS991) exMove(g.items.indexOf(it) - g.items.indexOf(exSel?.it ?? g.items[0])); else pick(); });
     row.lastChild.addEventListener('click', (e) => {
       e.stopPropagation();
+      // (FT-991A: a click only selects; values change with SELECT + MULTI / wheel, as on the radio)
+      if (IS991) { exMove(g.items.indexOf(it) - g.items.indexOf(exSel?.it ?? g.items[0])); return; }
       if (!pick()) return;
       if (it.t === 'text') {
         const t = prompt(`${it.name}（最大 ${it.n} 文字）`, (s.ex[key] || '').trim());
         if (t != null && t.slice(0, it.n) !== (s.ex[key] || '').trim()) radio.setEx(key, t.slice(0, it.n));
       } else exAdjust(e.shiftKey ? -1 : 1);
     });
-    row.addEventListener('wheel', (e) => { e.preventDefault(); const n = wheelNotch(e, exWheel); if (n && pick()) exAdjust(n); }, { passive: false });
+    // FT-991A: the wheel scrolls through the items (as MULTI); the value changes only while SELECT is on (handled on the list)
+    if (!IS991) row.addEventListener('wheel', (e) => { e.preventDefault(); const n = wheelNotch(e, exWheel); if (n && pick()) exAdjust(n); }, { passive: false });
     il.appendChild(row);
-    if (it.t !== 'na' && radio.connected) radio.send(`EX${key};`, { read: true });
+    // (FT-991A: the 153 items are read as they come into view)
+    if (!IS991 && it.t !== 'na' && radio.connected) radio.send(`EX${key};`, { read: true });
   });
   drawSettings();
 }
@@ -1408,9 +1701,11 @@ function drawSettings() {
     const it = exGroup.items.find((x) => exGroup.key + x.p === row.dataset.key);
     setText(row.lastChild, radio.connected ? exText(it, s.ex[row.dataset.key]) : '—');
     row.classList.toggle('sel', exSel?.key === row.dataset.key);
+    row.classList.toggle('edit', !!ui.exEdit && exSel?.key === row.dataset.key);
   }
+  if ($('#exmSel')) setText($('#exmSel'), ui.exEdit ? 'ENTER' : 'SELECT');
   // reset the selected item to its factory default (only items whose default the manuals print)
-  const def = exSel && EX_DEFAULTS[exSel.key];
+  const def = exSel && EXD[exSel.key];
   const b = $('#exmDef');
   b.hidden = !exSel;
   b.disabled = def == null || !radio.connected || s.ex[exSel?.key] === def;
@@ -1420,7 +1715,10 @@ function drawSettings() {
 // ---------------- side panel VFO keys (app functions not on the radio's FUNC pages) ----------------
 function setupVfoKeys() {
   const acts = { lock: () => radio.setLock(!s.lock), dual: () => radio.setDual(!s.dual), atob: () => radio.copyAtoB(), btoa: () => radio.copyBtoA(), step: () => ACTIONS.step() };
-  document.querySelectorAll('[data-vfo]').forEach((b) => b.addEventListener('click', () => { acts[b.dataset.vfo](); render(); }));
+  // (the side panel's keys only: the bands on the screen carry data-vfo too)
+  document.querySelectorAll('#secVfo [data-vfo]').forEach((b) => b.addEventListener('click', () => { acts[b.dataset.vfo](); render(); }));
+  // the FT-991A has one receiver
+  document.querySelector('[data-vfo="dual"]').hidden = IS991;
   setInterval(() => {
     document.querySelector('[data-vfo="lock"]').classList.toggle('on', s.lock);
     document.querySelector('[data-vfo="dual"]').classList.toggle('on', s.dual);
@@ -1444,6 +1742,8 @@ function setupFt8() {
   let rows = [];
   const draw = () => {
     const shown = cfg.ft8Cq ? rows.filter((r) => r.tx || /^CQ\b/.test(r.text) || toMe(r.text)) : rows;
+    // (the list is rebuilt: keep where it was scrolled to)
+    const top = list.scrollTop;
     list.innerHTML = '';
     let lastUtc = null;
     for (const r of shown) {
@@ -1461,7 +1761,21 @@ function setupFt8() {
       }
       list.appendChild(el);
     }
+    list.scrollTop = top;
   };
+  // the RX list reaches down to the window's bottom (above the status bar), at least 190 px; the TX panel beside it takes
+  // the same height. Follows the window size (and the page's layout: the deck sits under the radio's face).
+  const fitList = () => {
+    const panel = $('#panelFt8');
+    if (panel.hidden) return;
+    const top = list.getBoundingClientRect().top + window.scrollY;
+    const below = panel.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom;
+    const h = Math.max(190, Math.floor(window.innerHeight - $('#statusbar').offsetHeight - 14 - top - below));
+    if (list.style.minHeight !== `${h}px`) list.style.minHeight = `${h}px`;
+  };
+  window.addEventListener('resize', fitList);
+  new ResizeObserver(fitList).observe($('#radio'));
+  ui.ft8Fit = fitList;
   const addRows = (more) => { rows = [...more, ...rows].sort((a, b) => b.slot - a.slot).slice(0, 300); draw(); }; // newest slot on top
   ft8.addEventListener('decoded', (e) => {
     $('#ft8Info').textContent = `${e.detail.utc} · ${e.detail.rows.length} 件`;
@@ -1758,9 +2072,95 @@ function drawStatusbar() {
   setText($('#sbClock'), `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`);
 }
 
+// FT-991A screen icons (manual p.22 各種アイコン表示) and its own parts of the face
+function statusHtml991() {
+  // each icon at its own place (manual p.22, product photo): row 1 TUNER / ATT / SPLIT (and the repeater shift),
+  // row 2 the preamp (IPO / AMP1 / AMP2) / VOX / tone (ENC, DEC, DCS); x, y in cqi of the screen
+  const pre = ['IPO', 'AMP1', 'AMP2'][preampVal(0)] || 'IPO';
+  const tone = ['', 'DEC', 'ENC', 'DCS', 'DCS'][s.ct[0]] || '';
+  const items = [
+    s.tuner && ['TUNER', 'red', 0.35, 1.1],
+    s.att && ['ATT', '', 13.7, 1.3],
+    isSplit() && ['SPLIT', '', 20.4, 1.3],
+    s.os[0] === 1 && ['+', '', 29.5, 1.3], s.os[0] === 2 && ['−', '', 29.5, 1.3],
+    [pre, '', 0.6, 4.9],
+    s.vox && ['VOX', '', 10.2, 4.9],
+    tone && [tone, '', 20.4, 4.9],
+  ].filter(Boolean);
+  return items.map(([t, c, x, y]) => `<span class="si ${c}" style="left:${x}cqi;top:${y}cqi">${t}</span>`).join('');
+}
+function drawFace991(conn) {
+  const lcdCls = `lcd lcd991${conn ? (s.synced ? '' : ' nosync') : ' off'}`;
+  const lcd = $('#lcd');
+  if (lcd.className !== lcdCls) { lcd.className = lcdCls; requestAnimationFrame(fitFreq); }
+  const st = statusHtml991();
+  if ($('#stBar').innerHTML !== st) $('#stBar').innerHTML = st;
+  $('#t9Hiswr').classList.toggle('on', (s.tx && s.meters[6] > 126) || !!s.ri?.hiswr);
+  // the bar under the frequency: the value of the MULTI knob's function
+  $('#t9Lvl').style.width = `${clamp(paramFrac(cfg.func), 0, 1) * 100}%`;
+  // operating mode display (IF P7): VFO-A / MEM / MT / QMB / PMS / HOME
+  const vm = s.vm[0];
+  // "VFO-" small and "A" large, as on the screen
+  const vfoTxt = ['VFO-<b>A</b>', 'MEM', 'MT', 'QMB', 'QMB', 'PMS', 'HOME'][vm.t] || 'VFO-<b>A</b>';
+  if ($('#t9Vfo').innerHTML !== vfoTxt) $('#t9Vfo').innerHTML = vfoTxt;
+  setText($('#t9Ch'), vm.t === 1 || vm.t === 2 ? `CH ${String(+vm.ch || 0).padStart(3, '0')}` : '');
+  for (let v = 0; v < 2; v++) {
+    const mb = $(`#band${v}`).querySelector('.b-mode'), mn = MODE_NAME[s.mode[v]] || '---';
+    mb.textContent = mn;
+    mb.classList.toggle('long', mn.length > 6); // (DATA-LSB, DATA-USB, C4FM-DN: set narrower to stay in the box)
+    const html = freqHtml(s.freq[v]);
+    if (html !== lastFreqHtml[v]) { $(`#freq${v}`).innerHTML = html; lastFreqHtml[v] = html; fitFreq(); }
+    $(`#freq${v}`).classList.toggle('tx', (s.tx || ui.ptt) && s.ft === v);
+  }
+  // with the clarifier on, the VFO-B line shows CLAR and its offset (manual p.19, 22)
+  const clarOn = s.clarRx[0] || s.clarTx[0];
+  $('#band1').classList.toggle('clar', clarOn);
+  setText($('#t9ClarTag'), s.clarRx[0] && s.clarTx[0] ? 'CLAR RX/TX' : s.clarTx[0] ? 'CLAR TX' : 'CLAR');
+  const ofs = `${s.clarOfs[0] > 0 ? '+' : ''}${s.clarOfs[0]}<small>Hz</small>`;
+  if ($('#t9ClarOfs').innerHTML !== ofs) $('#t9ClarOfs').innerHTML = ofs;
+  const d = new Date();
+  setText($('#t9Clock'), `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+  for (const { k, kind } of afKnobs) {
+    if (!k.active) k.setFraction(kind === 'af' && cfg.spkMute ? cfg.rxVol / 2 : (kind === 'af' ? s.af[0] : s.rf[0]) / 255);
+  }
+  // keys with a state, and the LED strip above the dial: RX (green, signal above squelch) / TX (red), FAST, LOCK
+  $('[data-act="split991"]').classList.toggle('on', isSplit());
+  $('[data-act="clar991"]').classList.toggle('on', clarOn);
+  $('[data-act="tune991"]').classList.toggle('on', s.tuner);
+  $('[data-act="txw"]').classList.toggle('on', s.txw);
+  const busy = conn && !s.tx && s.ri?.busy;
+  $('#led9Rx').classList.toggle('on', !!busy);
+  $('#led9Tx').classList.toggle('on', conn && (s.tx || ui.ptt));
+  $('#led9Fast').classList.toggle('on', conn && s.fn === 2);
+  $('#led9Lock').classList.toggle('on', conn && s.lock);
+  // VFO lamps: green under the receiving one (MEM in memory mode, else VFO-A), red under the transmitting one
+  const mem = vm.t === 1 || vm.t === 2;
+  for (const [id, rx, tx] of [['#led9Mem', mem, mem && s.ft === 0], ['#led9A', !mem, !mem && s.ft === 0], ['#led9B', false, s.ft === 1]]) {
+    $(id).classList.toggle('rx', conn && rx);
+    $(id).classList.toggle('tx', conn && tx);
+  }
+}
+
 function draw() {
   const conn = radio.connected;
   $('#btnConnect').classList.toggle('on', conn);
+  if (IS991) drawFace991(conn); else drawFaceFtx1(conn);
+  drawStatusbar();
+  $('#funcBox').textContent = funcName();
+
+  drawMeters();
+  drawFilters();
+  updatePop();
+  for (const sk of softKeys) {
+    sk.b.textContent = val(sk.k.name);
+    sk.span.textContent = sk.k.key();
+    sk.el.classList.toggle('open', (!!sk.k.pop && ui.pop === sk.k.pop) || (!!sk.k.func && cfg.func === sk.k.func));
+  }
+  $('#scope').style.visibility = cfg.afFft ? '' : 'hidden';
+  drawCommon(conn);
+}
+
+function drawFaceFtx1(conn) {
   const lcd = $('#lcd');
   // dark while POWER is off; connected but before the radio has sent its frequency, the keys show and the values stay
   // blank (not the placeholders such as 14.200)
@@ -1769,7 +2169,6 @@ function draw() {
 
   const st = statusHtml();
   if ($('#stBar').innerHTML !== st) $('#stBar').innerHTML = st;
-  drawStatusbar();
 
   for (let v = 0; v < 2; v++) {
     const band = $(`#band${v}`);
@@ -1792,17 +2191,6 @@ function draw() {
       el.classList.toggle('na', !!t.na?.(v)); // item names are yellow; white where the item does not apply
     }
   }
-  $('#funcBox').textContent = funcName();
-
-  drawMeters();
-  drawFilters();
-  updatePop();
-  for (const sk of softKeys) {
-    sk.b.textContent = val(sk.k.name);
-    sk.span.textContent = sk.k.key();
-    sk.el.classList.toggle('open', !!sk.k.pop && ui.pop === sk.k.pop);
-  }
-  $('#scope').style.visibility = cfg.afFft ? '' : 'hidden';
 
   for (const { k, v } of afKnobs) {
     const kind = knobMode(v);
@@ -1823,15 +2211,25 @@ function draw() {
     const busy = conn && !s.tx && (v === 0 ? (s.ri ? s.ri.busy : s.smeter[0] > Math.max(12, s.sql[0] / 2)) : s.dual && s.smeter[1] > Math.max(12, s.sql[1] / 2));
     $(`#ledBusy${v}`).className = s.tx && s.ft === v ? 'red' : busy ? 'green' : '';
   }
+  // the radio's scope settings line (e.g. "CENTER FAST2 SPAN 100kHz")
+  $('#scInfo').textContent = `${SC_DMODE[scopeDmode()]} ${SC_SPEED[+s.scope[0]] || ''} SPAN ${(SC_SPAN[s.scope[5]] || '').replace('k', 'kHz').replace('M', 'MHz')}`;
+}
 
+// PTT key, PC squelch, the PC deck's panels
+function drawCommon(conn) {
+  // FT-991A: in the DATA modes (DATA-LSB / DATA-USB / DATA-FM) the AF-FFT shows 0-3 kHz, else the AF-FFT span setting
+  const span = IS991 && ['8', 'C', 'A'].includes(s.mode[0]) ? 3000 : +cfg.scopeSpan;
+  if (scope.span !== span) scope.span = span;
   $('#btnPtt').classList.toggle('on', s.tx || ui.ptt);
   // PC playback follows the radio's squelch, in the FM modes only (where the knob is SQL, as RF/SQL VR = AUTO; elsewhere
   // it is RF and SQL could not be turned down): MAIN from RI (SQL open / closed, sent by the radio as it changes), SUB
   // estimated from its S meter against SQL (as the SUB BUSY lamp); SQL at 0 is always open
   {
     const on = (v) => cfg.pcSql && conn && !s.tx && isFM(s.mode[v]) && s.sql[v] > 0;
-    const mainOpen = !on(0) || (s.ri ? s.ri.busy : true);
-    const subOpen = !on(1) || s.smeter[1] > Math.max(12, s.sql[1] / 2);
+    // (FT-991A: its USB audio carries the transmitted audio back while transmitting; not played on the PC, except the CW sidetone)
+    const txEcho = IS991 && s.tx && !isCW(s.mode[0]);
+    const mainOpen = !txEcho && (!on(0) || (s.ri ? s.ri.busy : true));
+    const subOpen = !txEcho && (!on(1) || s.smeter[1] > Math.max(12, s.sql[1] / 2));
     audio.setRxSquelch(mainOpen, subOpen);
   }
   // CW TX / RX panels only while the operated VFO is in CW
@@ -1839,14 +2237,11 @@ function draw() {
   $('#panelCw').hidden = !cw;
   $('#panelDec').hidden = !cw;
   const data = ['C', '8'].includes(s.mode[V()]);
-  $('#panelFt8').hidden = !data;
-  $('#panelFt8Tx').hidden = !data;
+  if ($('#panelFt8').hidden === data) { $('#panelFt8').hidden = !data; $('#panelFt8Tx').hidden = !data; if (data) requestAnimationFrame(() => ui.ft8Fit?.()); }
   $('#cwWpm').textContent = s.ks;
   if (!ui.cwSpeedDrag) $('#cwSpeed').value = s.ks;
   $('#catErr').textContent = `ERR ${s.errors}`;
   $('#catErr').classList.toggle('err', s.errors > 0);
-  // the radio's scope settings line (e.g. "CENTER FAST2 SPAN 100kHz")
-  $('#scInfo').textContent = `${SC_DMODE[scopeDmode()]} ${SC_SPEED[+s.scope[0]] || ''} SPAN ${(SC_SPAN[s.scope[5]] || '').replace('k', 'kHz').replace('M', 'MHz')}`;
 }
 
 radio.addEventListener('change', () => {
@@ -1875,10 +2270,32 @@ setupSettings();
 setupSidebar();
 setupVfoKeys();
 $('#exmBack').addEventListener('click', closeSettings);
+// FT-991A menu: the wheel over the list moves the selection (down = next item), or changes the value after SELECT
+if (IS991) $('#exmItems').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const n0 = wheelNotch(e, exWheel);
+  if (!n0 || !exSel) return;
+  const n = wheelAccel(n0, exWheel);
+  if (ui.exEdit) exAdjust(n); else exMove(-n);
+}, { passive: false });
+// FT-991A menu: SELECT starts changing the selected item's value, ENTER (the same key) ends it
+$('#exmSel')?.addEventListener('click', () => {
+  if (!exSel) return;
+  const { it, key } = exSel;
+  if (it.t === 'na') { toast(`${it.name} は CAT では操作できません`); return; }
+  if (it.t === 'text') {
+    const t = prompt(`${it.name}（最大 ${it.n} 文字）`, (s.ex[key] || '').trim());
+    if (t != null && t.slice(0, it.n) !== (s.ex[key] || '').trim()) radio.setEx(key, t.slice(0, it.n));
+    return;
+  }
+  ui.exEdit = !ui.exEdit;
+  if (!ui.exEdit) exFlush();
+  drawSettings();
+});
 $('#exmDef').addEventListener('click', () => {
-  const def = exSel && EX_DEFAULTS[exSel.key];
+  const def = exSel && EXD[exSel.key];
   if (def == null) return;
-  radio.setEx(exSel.key, def);
+  sendEx(exSel.key, def);
   drawSettings();
 });
 setupDecoder();
@@ -1895,7 +2312,7 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
   $('#btnAppInst').textContent = inApp ? 'アンインストール' : 'インストール';
   $('#appInstHint').textContent = inApp ? 'アプリとして起動中' : 'ブラウザで表示中';
   $('#btnAppInst').addEventListener('click', async () => {
-    if (inApp) { toast('ウインドウ右上の ⋮ →「FTX-1 Controller をアンインストール」を選んでください', false, 8000); return; }
+    if (inApp) { toast('ウインドウ右上の ⋮ →「FTX-1 Controller をアンインストール」を選んでください（機種を FT-991A にしていても名前は同じです）', false, 8000); return; }
     if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; return; }
     toast('Chrome のメニュー（右上の ⋮）→「キャスト、保存、共有」→「ページをアプリとしてインストール」から入れてください', false, 8000);
   });

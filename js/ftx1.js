@@ -3,12 +3,20 @@
 // VFO index: 0 = MAIN (VFO-A), 1 = SUB (VFO-B).
 
 import { SerialLink } from './serial.js';
+import { IS991 } from './model.js';
 
 const pad = (n, w) => String(Math.max(0, Math.round(n))).padStart(w, '0');
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export const MODES = [
+// FT-991A: the radio's MODE screen (LSB USB AM / CW-LSB CW-USB FM / RTTY-LSB RTTY-USB C4FM / DATA-LSB DATA-USB DATA-FM);
+// AM-N / FM-N are only reached from AM / FM with NAR. Its code E is C4FM (PSK on the FTX-1).
+export const MODES = IS991 ? [
+  { code: '1', name: 'LSB' }, { code: '2', name: 'USB' }, { code: '5', name: 'AM' },
+  { code: '7', name: 'CW-LSB' }, { code: '3', name: 'CW-USB' }, { code: '4', name: 'FM' },
+  { code: '6', name: 'RTTY-LSB' }, { code: '9', name: 'RTTY-USB' }, { code: 'E', name: 'C4FM' },
+  { code: '8', name: 'DATA-LSB' }, { code: 'C', name: 'DATA-USB' }, { code: 'A', name: 'DATA-FM' },
+] : [
   { code: '1', name: 'LSB' }, { code: '2', name: 'USB' },
   { code: '3', name: 'CW-U' }, { code: '7', name: 'CW-L' },
   { code: '5', name: 'AM' }, { code: 'D', name: 'AM-N' },
@@ -19,14 +27,15 @@ export const MODES = [
   { code: 'E', name: 'PSK' }, { code: 'H', name: 'C4FM' },
 ];
 export const MODE_NAME = Object.fromEntries(MODES.map((m) => [m.code, m.name]));
-MODE_NAME.I = 'C4FM-VW';
+if (IS991) { MODE_NAME.D = 'AM-N'; MODE_NAME.B = 'FM-N'; } else MODE_NAME.I = 'C4FM-VW';
 
 export const isCW = (code) => code === '3' || code === '7';
-export const isSSB = (code) => ['1', '2', '8', 'C', '6', '9', 'E'].includes(code);
-export const isFM = (code) => ['4', 'B', 'A', 'F', 'H', 'I'].includes(code);
+export const isSSB = (code) => (IS991 ? ['1', '2', '8', 'C', '6', '9'] : ['1', '2', '8', 'C', '6', '9', 'E']).includes(code);
+export const isFM = (code) => (IS991 ? ['4', 'B', 'A', 'E'] : ['4', 'B', 'A', 'F', 'H', 'I']).includes(code);
 
 // BS band codes; lo/hi are used to detect the current band, def is the jump-in frequency for the local band stack
-export const BANDS = [
+// gen: the general-coverage entry (not a band of its own); ham: amateur bands (BAND UP / DOWN without CAT steps these)
+const BANDS_FTX1 = [
   { code: 0, label: '1.8', name: '160m', lo: 1.8e6, hi: 2.0e6, def: 1.9e6, mode: '1' },
   { code: 1, label: '3.5', name: '80m', lo: 3.5e6, hi: 4.0e6, def: 3.535e6, mode: '1' },
   { code: 2, label: '5', name: '60m', lo: 5.0e6, hi: 5.5e6, def: 5.3305e6, mode: '2' },
@@ -43,8 +52,19 @@ export const BANDS = [
   { code: 13, label: '144', name: '2m', lo: 144e6, hi: 148e6, def: 145e6, mode: '4' },
   { code: 14, label: '430', name: '70cm', lo: 420e6, hi: 450e6, def: 433e6, mode: '4' },
 ];
+// FT-991A BS codes (CAT manual 1808-D): 11 GEN, 12 MW, 14 AIR, 15 144 MHz, 16 430 MHz; the radio's BAND screen order
+const BANDS_991 = [
+  ...BANDS_FTX1.slice(0, 11),
+  { code: 11, label: 'GEN', name: 'GEN', lo: 0.03e6, hi: 470e6, def: 0, mode: '' },
+  { code: 12, label: 'MW', name: 'MW', lo: 0.522e6, hi: 1.71e6, def: 0.594e6, mode: '5' },
+  { code: 14, label: 'AIR', name: 'AIR', lo: 108e6, hi: 137e6, def: 118.1e6, mode: '5' },
+  { code: 15, label: '144', name: '2m', lo: 144e6, hi: 146e6, def: 145e6, mode: '4' },
+  { code: 16, label: '430', name: '70cm', lo: 430e6, hi: 440e6, def: 433e6, mode: '4' },
+];
+export const BANDS = (IS991 ? BANDS_991 : BANDS_FTX1).map((b) => ({ ...b, gen: b.label === 'GEN', ham: !['GEN', 'AIR', 'MW'].includes(b.label) }));
+const GEN = BANDS.find((b) => b.gen);
 export function bandOf(hz) {
-  return BANDS.find((b) => b.code !== 11 && hz >= b.lo && hz <= b.hi) || BANDS[11];
+  return BANDS.find((b) => !b.gen && hz >= b.lo && hz <= b.hi) || GEN;
 }
 // PA command P1: 0 = HF/50, 1 = 144, 2 = 430
 export const bandType = (hz) => (hz >= 420e6 ? 2 : hz >= 144e6 ? 1 : 0);
@@ -52,7 +72,22 @@ export const bandType = (hz) => (hz >= 420e6 ? 2 : hz >= 144e6 ? 1 : 0);
 export const AGC = ['OFF', 'FAST', 'MID', 'SLOW', 'AUTO'];
 export const PREAMP_HF = ['IPO', 'AMP1', 'AMP2'];
 
-// SH width code -> Hz (manual table 5; code 0 = default, which depends on the roofing filter)
+// SH width code -> Hz (manual table 5; code 0 = default, which depends on the roofing filter).
+// FT-991A (CAT manual 1808-D table 4): the codes depend on NAR. SSB (and DATA): narrow 01-09, wide 09-21; CW / RTTY:
+// narrow 01-10, wide 10-17; code 00 is the default width of each (SSB 1500 / 2400, CW 500 / 2400, RTTY 300 / 500).
+const W991_SSB = [1500, 200, 400, 600, 850, 1100, 1350, 1500, 1650, 1800, 1950, 2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000, 3200];
+const W991_CW = [500, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 800, 1200, 1400, 1700, 2000, 2400, 3000];
+// DATA-LSB / DATA-USB follow the RTTY/PSK column: the radio stops at code 17 (3000 Hz) there, even with DATA MODE OTHERS
+const cw991 = (mode) => isCW(mode) || ['6', '9', '8', 'C'].includes(mode);
+const w991 = (mode, code, nar) => {
+  const cw = cw991(mode);
+  if (code === 0) return cw ? (nar ? (isCW(mode) ? 500 : 300) : (isCW(mode) ? 2400 : 500)) : (nar ? 1500 : 2400);
+  return (cw ? W991_CW : W991_SSB)[code] || 0;
+};
+const range991 = (mode, nar) => {
+  const cw = cw991(mode);
+  return nar ? [1, cw ? 10 : 9] : (cw ? [10, 17] : [9, 21]);
+};
 const W_SSB = [0, 300, 400, 600, 850, 1100, 1200, 1500, 1650, 1800, 1950, 2100, 2250, 2400, 2450, 2500, 2600, 2700, 2800, 2900, 3000, 3200, 3500, 4000];
 // CW / DATA-L/U / RTTY-L/U / PSK
 const W_NAR = [0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 800, 1200, 1400, 1700, 2000, 2400, 3000, 3500, 4000];
@@ -60,14 +95,18 @@ const NAR_MODES = ['3', '7', '8', 'C', '6', '9', 'E'];
 // AM / AM-N: 6000, FM-N / D-FM-N: 9000, FM / DATA-FM: 16000 (fixed)
 const fixedWidth = (mode) => (mode === '5' || mode === 'D' ? 6000 : mode === 'B' || mode === 'F' ? 9000 : isFM(mode) ? 16000 : 0);
 const widthTable = (mode) => (NAR_MODES.includes(mode) ? W_NAR : W_SSB);
-export const widthMax = (mode) => (fixedWidth(mode) ? 0 : widthTable(mode).length - 1);
-export function widthHz(mode, code) {
+// nar: the NAR state (FT-991A only, where it selects the code range)
+export const widthMin = (mode, nar) => (fixedWidth(mode) ? 0 : IS991 ? range991(mode, nar)[0] : 0);
+export const widthMax = (mode, nar) => (fixedWidth(mode) ? 0 : IS991 ? range991(mode, nar)[1] : widthTable(mode).length - 1);
+export function widthHz(mode, code, nar) {
   if (fixedWidth(mode)) return fixedWidth(mode);
+  if (IS991) return w991(mode, code, nar) || 2400;
   if (code === 0) return isCW(mode) || ['6', '9', 'E'].includes(mode) ? 500 : 2400;
   return widthTable(mode)[code] || 2400;
 }
-export function widthText(mode, code) {
+export function widthText(mode, code, nar) {
   if (fixedWidth(mode)) return `${fixedWidth(mode)}Hz`;
+  if (IS991) { const hz = w991(mode, code, nar); return hz ? `${hz}Hz` : String(code); }
   if (code === 0) return 'DEF';
   const hz = widthTable(mode)[code];
   return hz ? `${hz}Hz` : String(code);
@@ -164,13 +203,32 @@ export class FTX1 extends EventTarget {
 
   // baud: number or 'auto'. Resolves with the rate that got an ID reply; rejects with code NO_REPLY otherwise.
   async connect(port, baud) {
-    const rates = baud === 'auto' ? [38400, 4800, 9600, 19200, 115200] : [+baud];
+    const rates = baud === 'auto' ? this.rates : [+baud];
     this.probing = true;
+    let opened = false, openErr = null;
     try {
-      for (const b of rates) {
-        await this.link.open(port, b);
-        if (await this._probe()) {
+      for (const b of rates) for (const stopBits of this.stopBitsTry) {
+        try {
+          await this.link.open(port, b, { stopBits });
+        } catch (e) {
+          // (some drivers refuse a format: try the next one)
+          openErr = e;
+          this._emit('log', { dir: 'err', text: `probe ${b}bps stop ${stopBits}: open failed (${e.message})` });
+          continue;
+        }
+        opened = true;
+        await this._afterOpen();
+        // diagnosis: every byte the radio sends while probing goes to the CAT CONSOLE, framed or not
+        const got = [];
+        this.link.rawTap = (v) => got.push(...v);
+        const ok = await this._probe();
+        this.link.rawTap = null;
+        const hex = got.slice(0, 48).map((x) => x.toString(16).padStart(2, '0')).join(' ');
+        const txt = String.fromCharCode(...got.slice(0, 48).map((x) => (x >= 32 && x < 127 ? x : 46)));
+        this._emit('log', { dir: ok ? 'sys' : 'err', text: `probe ${b}bps stop ${stopBits}: ${got.length ? `${got.length} bytes  ${hex}  "${txt}"` : 'no bytes received'}` });
+        if (ok) {
           this.baud = b;
+          this.stopBits = stopBits;
           this.port = port;
           this.s.errors = 0; // count rejections per connection
           this.s.synced = false; // until the radio has answered with a frequency, the screen shows nothing
@@ -189,10 +247,19 @@ export class FTX1 extends EventTarget {
     } finally {
       this.probing = false;
     }
+    // the port never opened in any format: report that, not "no reply"
+    if (!opened && openErr) throw openErr;
     const err = new Error('CAT応答なし');
     err.code = 'NO_REPLY';
     throw err;
   }
+
+  // stop bits tried at each rate, and what to do right after opening (the FT-991A overrides these)
+  stopBitsTry = [1];
+  modeDependent = MODE_DEPENDENT;
+  async _afterOpen() {}
+  // CAT rates tried by 'auto', in this order
+  rates = [38400, 4800, 9600, 19200, 115200];
 
   async _probe() {
     for (let i = 0; i < 2; i++) {
@@ -240,6 +307,7 @@ export class FTX1 extends EventTarget {
         this._emit('log', { dir: 'tx', text: item.cmd, poll: item.poll });
         // the radio answers in order: keep reads awaiting an answer, oldest first
         if (item.read) this.pending = [...(this.pending || []).slice(-31), item.cmd];
+        else this.lastSet = item.cmd; // (named when the radio rejects a set command)
       } catch (e) {
         this._emit('log', { dir: 'err', text: e.message });
         break;
@@ -323,12 +391,12 @@ export class FTX1 extends EventTarget {
     if (m === '?') {
       // the oldest read still waiting for its answer is the one the radio rejected
       const bad = (this.pending || []).shift();
-      if (bad && MODE_DEPENDENT.test(bad)) {
+      if (bad && this.modeDependent.test(bad)) {
         this._emit('log', { dir: 'sys', text: `${bad} not available in this mode / band` });
         return;
       }
       s.errors++;
-      this._emit('log', { dir: 'err', text: `? (rejected: ${bad || 'a set command'})` });
+      this._emit('log', { dir: 'err', text: `? (rejected: ${bad || (this.lastSet ? this.lastSet.replace(/;$/, '') : 'a set command')})` });
       this._changed();
       return;
     }
@@ -336,6 +404,13 @@ export class FTX1 extends EventTarget {
     // an answer settles the oldest pending read with the same command (AI pushes may settle one early; harmless)
     const pi = (this.pending || []).findIndex((x) => x.startsWith(c));
     if (pi >= 0) this.pending.splice(pi, 1);
+    this._parse(c, p);
+    this._changed();
+  }
+
+  // c: command, p: its parameters
+  _parse(c, p) {
+    const s = this.s;
     const v = +p[0];
     const num = (a, b) => parseInt(p.slice(a, b), 10);
     const ok = (key) => !this._held(key);
@@ -457,7 +532,6 @@ export class FTX1 extends EventTarget {
       case 'AI': s.ai = p[0] === '1'; break;
       default: break;
     }
-    this._changed();
   }
 
   // ---- setters ----

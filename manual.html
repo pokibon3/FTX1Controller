@@ -70,6 +70,7 @@ footer { margin-top: 48px; color: var(--dim); font-size: 13px; border-top: 1px s
     <li><a href="#ft8">FT8 / FT4</a></li>
     <li><a href="#setting">本体の設定メニュー</a></li>
     <li><a href="#trouble">困ったときは</a></li>
+    <li><a href="#ft991a">FT-991A で使う</a></li>
   </ol>
 </nav>
 
@@ -174,7 +175,7 @@ footer { margin-top: 48px; color: var(--dim); font-size: 13px; border-top: 1px s
   <dt>VFO</dt>
   <dd>LOCK、DUAL RX、A▸B / B▸A、ダイヤルの刻み（STEP）。</dd>
   <dt>SETUP</dt>
-  <dd>CAT ボーレート（通常は自動検出）、本体の CAT ボーレート書込、CAT CONSOLE（送受信したコマンドの表示）、アプリのインストール、TX ボタンの LATCH、PTT 方式（通常は CAT (TX1)）、<span class="btn">CWキーイング</span>（2 本目のポート）、ダイヤル分解能、TOT。</dd>
+  <dd>機種（FTX-1 / FT-991A。変えるとページを読み込み直します。<a href="#ft991a">11 章</a>）、CAT ボーレート（通常は自動検出）、本体の CAT ボーレート書込、CAT CONSOLE（送受信したコマンドの表示）、アプリのインストール、TX ボタンの LATCH、PTT 方式（通常は CAT (TX1)）、<span class="btn">CWキーイング</span>（2 本目のポート）、ダイヤル分解能、TOT。</dd>
 </dl>
 
 <h2 id="cw">7. CW（受信・送信）</h2>
@@ -250,8 +251,47 @@ footer { margin-top: 48px; color: var(--dim); font-size: 13px; border-top: 1px s
   <dd>SETUP の「CAT CONSOLE を表示」で、アプリと本体の間のコマンドが見られます。本体が受け付けなかったコマンドは画面下に赤で表示されます。</dd>
 </dl>
 
+<h2 id="ft991a">11. FT-991A で使う</h2>
+<p>左側パネル SETUP の「機種」を <b>FT-991A</b> にすると、ページを読み込み直して FT-991A 用の画面（本体の前面パネル）とコマンドに切り替わります。CW の解読・送信、FT8 / FT4、USB オーディオ、CAT CONSOLE は FTX-1 と同じように使えます。</p>
+
+<h3>本体側の設定（メニュー番号）</h3>
+<table>
+  <tr><th>使う機能</th><th>メニュー</th><th>設定値</th></tr>
+  <tr><td>CAT</td><td>031 CAT RATE</td><td>38400bps がおすすめ（アプリは自動検出。工場出荷時は 4800bps）</td></tr>
+  <tr><td>CAT（応答しないとき）</td><td>033 CAT RTS</td><td>DISABLE</td></tr>
+  <tr><td>CW の直接キーイング</td><td>060 PC KEYING</td><td><b>DTR</b> または <b>RTS</b></td></tr>
+  <tr><td>FT8 / FT4 の送信</td><td>072 DATA PORT SELECT</td><td><b>USB</b></td></tr>
+  <tr><td>パソコンのマイクで SSB 送信</td><td>106 SSB MIC SELECT / 109 SSB PORT SELECT</td><td>REAR / USB</td></tr>
+  <tr><td>パソコンへの受信音の大きさ</td><td>073 DATA OUT LEVEL / 107 SSB OUT LEVEL など</td><td>オシロが振り切れない程度</td></tr>
+</table>
+<p>パソコンからは USB のシリアルポートが 2 本見えます。<span class="btn">⏻</span>（POWER）で選ぶのは CAT 用（Windows では Enhanced COM Port）、SETUP の <span class="btn">CWキーイング</span> で選ぶのはもう一方（Standard COM Port）です。</p>
+
+<h3>前面パネル</h3>
+<dl>
+  <dt>⏻（ON/OFF）</dt><dd>CAT ポートに接続 / 切断します（FTX-1 の POWER と同じ）。</dd>
+  <dt>TX</dt><dd>このアプリの送信キー（本体の MIC ジャックの位置）。押している間送信します（<kbd>Space</kbd> キーでも可）。</dd>
+  <dt>F（M-LIST）</dt><dd>ファンクションメニュー。6 ページあり、<span class="btn">BACK</span> / <span class="btn">FWD</span> で切り替えます。キーの上段が機能、下段が設定です。NB・DNR・NOTCH・CONT・APF・SHIFT・WIDTH・PROC・SPEED・PITCH・TONE・DCS・SQL などは、押すと MULTI ツマミの調整先になります（枠が光ります）。ページの並びはアプリ独自で、本体と同じではありません。</dd>
+  <dt>MENU（SETUP）</dt><dd>メニュー 001〜153 の設定画面（本体と同じく、メーターの下に 3 行ずつ）。MULTI ツマミで項目を選び、<span class="btn">SELECT</span> を押してから MULTI で値を変え、<span class="btn">ENTER</span> で確定します。マウスホイールや値のクリックでも変えられます。<span class="btn">初期値に戻す</span> で、選んだ項目だけ工場出荷時の値（取扱説明書のメニュー一覧の初期値）に戻せます。</dd>
+  <dt>BAND / MODE</dt><dd>バンド選択 / モード選択の画面を開きます。</dd>
+  <dt>MULTI</dt><dd>画面左の文字（RF-P、MIC-G など）の機能を調整します。メニュー画面を開いているときは選んだ項目の値を変えます。</dd>
+  <dt>画面下の 4 つのキー</dt><dd><span class="btn">METER</span>（送信メーターの切替）、<span class="btn">RF PWR</span>・<span class="btn">MIC GAIN</span>（MULTI ツマミの機能を切り替え）、<span class="btn">AF-FFT</span>（スコープ欄の AF-FFT の表示 / 非表示。本体ではここが SWEEP ですが、本体のスコープは CAT で操作できないため置き換えています）。</dd>
+  <dt>A=B / A/B</dt><dd>VFO-A を VFO-B にコピー / VFO-A と VFO-B を入れ替えます。</dd>
+  <dt>RCL/STO / TUNE / TXW</dt><dd>QMB 呼出（長押しで書込） / チューナー ON/OFF（長押しでオートチューン） / 押している間 送信周波数を受信。</dd>
+  <dt>FAST / LOCK</dt><dd>ダイアルの変化量を 10 倍に / ダイアルロック。点灯は上の LED 表示にも出ます。</dd>
+  <dt>CLAR / V/M / A▸M / SPLIT</dt><dd>クラリファイア ON/OFF（長押しでオフセットを 0 に） / VFO⇔メモリー / 長押しで VFO-A をメモリーに書込 / スプリット（長押しでクイックスプリット）。</dd>
+  <dt>CLAR/VFO-B・RF GAIN・AF GAIN</dt><dd>スプリット中は VFO-B の周波数、それ以外はクラリファイアのオフセットを変えます / RF ゲイン / AF ゲイン（SETUP の「本体スピーカーを消音」中はパソコンの音量）。SQL はファンクションメニューの <span class="btn">SQL</span> を押して MULTI ツマミで調整します。</dd>
+  <dt>メインダイアル</dt><dd>VFO-A の周波数。1 ステップは SSB / CW / DATA / RTTY / AM が 10Hz（ファンクションメニューの 5/10Hz で切替）、FM / C4FM が 100Hz、FAST 中は 100Hz / 1kHz です（SETUP の STEP AUTO のとき）。</dd>
+</dl>
+
+<h3>FT-991A では使えないもの</h3>
+<ul>
+  <li>VFO-B のモードはアプリから変えられません（<span class="btn">A/B</span> で入れ替えてから変えてください）。</li>
+  <li>C.S キー、メモリーリスト（F 長押し）、メモリーチェック（A▸M）、SETUP 画面（MY CALL など）、本体のスコープの操作、MCH / GRP は CAT にコマンドがないため使えません。</li>
+  <li>DUAL RX（受信機は 1 つです）、FTX-1 の FINE、2 バンド表示、FILTER 表示はありません。</li>
+</ul>
+
 <footer>
-  CAT コマンドは八重洲無線「FTX-1 シリーズ CAT オペレーション リファレンスマニュアル」に準拠しています。メーターの換算値は近似値です。
+  CAT コマンドは八重洲無線「FTX-1 シリーズ CAT オペレーション リファレンスマニュアル」、FT-991A は「FT-991 シリーズ CAT オペレーション リファレンスマニュアル」（1808-D）に準拠しています。メーターの換算値は近似値です。
   CW の解読には <a href="https://github.com/pokibon3/cw_decoder4">CW Decoder 4</a>（GPL）、FT8 / FT4 の解読には <a href="https://github.com/kgoba/ft8_lib">ft8_lib</a>（MIT）を使っています。
 </footer>
 </div>
