@@ -974,6 +974,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .lcd991 .sk b, .lcd991 .pop.f991 .pt b { font: 700 3.3cqi/1.15 var(--t9-cond); letter-spacing: .1cqi; color: #fff; text-align: center; text-shadow: 0 .15cqi .2cqi rgba(0,0,0,.6); }
 .lcd991 .sk span, .lcd991 .pop.f991 .pt span { display: block; min-height: 3.3cqi; font: 700 2.9cqi/3.3cqi var(--t9-cond); letter-spacing: .25cqi; color: var(--t9-blue);
   text-align: center; background: #000; border-radius: .3cqi; max-width: none; overflow: hidden; }
+/* SWAP F1-F4 waiting for a function: blinks (as the radio's) */
+.lcd991 .pop.f991 .pt.swapping > * { animation: t9-blink .8s steps(2, jump-none) infinite; }
+@keyframes t9-blink { 50% { opacity: .15; } }
 .lcd991 .sk.open span, .lcd991 .pop.f991 .pt.func span { box-shadow: inset 0 0 0 .2cqi var(--t9-blue); }
 /* MODE / BAND screens under the VFO-A band, keys four across */
 .lcd991 .pop { top: 18.5cqi; bottom: 0; background: #000; }

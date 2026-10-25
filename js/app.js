@@ -183,6 +183,7 @@ const funcName = () => (IS991 ? MULTI_NAME[cfg.func]
 function assignFunc(key) {
   cfg.func = key;
   ui.funcRadioOnly = false;
+  if (IS991) ui.multiOn = true;
   if (!IS991 && SF_OF_PARAM[key] && radio.connected) { radio.setFuncKnob(SF_OF_PARAM[key]); ui.sfSeen = SF_OF_PARAM[key]; }
   save();
   popup(val(PARAMS[key].name), paramText(key), paramFrac(key));
@@ -263,6 +264,14 @@ const FM_STEP = ['5k', '6.25k', '10k', '12.5k', '20k', '25k'];
 const CTCSS = [67.0, 69.3, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5, 94.8, 97.4, 100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3, 131.8, 136.5, 141.3, 146.2, 151.4, 156.7, 159.8, 162.2, 165.5, 167.9, 171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5, 203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1];
 const DCS = ['023', '025', '026', '031', '032', '036', '043', '047', '051', '053', '054', '065', '071', '072', '073', '074', '114', '115', '116', '122', '125', '131', '132', '134', '143', '145', '152', '155', '156', '162', '165', '172', '174', '205', '212', '223', '225', '226', '243', '244', '245', '246', '251', '252', '255', '261', '263', '265', '266', '271', '274', '306', '311', '315', '325', '331', '332', '343', '346', '351', '356', '364', '365', '371', '411', '412', '413', '423', '431', '432', '445', '446', '452', '454', '455', '462', '464', '465', '466', '503', '506', '516', '523', '526', '532', '546', '565', '606', '612', '624', '627', '631', '632', '654', '662', '664', '703', '712', '723', '731', '732', '734', '743', '754'];
 
+// FT-991A: the four keys along the bottom of its screen (manual p.22-23; METER / RF PWR / MIC GAIN as shipped; the fourth
+// is SWEEP on the radio, which starts its own scope sweep and has no CAT command, so here it shows / hides the AF-FFT)
+const SOFT_KEYS_991 = [
+  { name: 'METER', key: () => METERS[cfg.meterSel], act: () => { const k = Object.keys(METERS).map(Number); setMeterSel(k[(k.indexOf(cfg.meterSel) + 1) % k.length]); } },
+  { name: 'RF PWR', key: () => `${s.power}W`, act: () => assignFunc('power'), func: 'power' },
+  { name: 'MIC GAIN', key: () => String(s.mic), act: () => assignFunc('mic'), func: 'mic' },
+  { name: 'AF-FFT', key: () => (cfg.afFft ? 'ON' : 'OFF'), act: () => { cfg.afFft = !cfg.afFft; save(); } },
+];
 // FT-991A [F] key: the function menu over the screen (manual p.23, 43): six touch keys per page with BACK / FWD,
 // label above and the setting below. Keys that pick a MULTI knob function (as on the radio) also switch on a tap.
 const F991_PAGES = () => [
@@ -314,7 +323,23 @@ const F991_PAGES = () => [
     { label: 'CH DIAL', value: () => `${chdSteps()[chdIdx()]}kHz`, func: 'chd', act: () => { if (cfg.func === 'chd') setChdIdx((chdIdx() + 1) % chdSteps().length); } },
     { label: 'MENU', value: () => 'SETUP', act: () => { closePop(); openSettings(0); } },
   ],
+  // the shipped functions of the screen's bottom keys, so they can be put back there
+  [...SOFT_KEYS_991.map((k) => ({ label: k.name, value: k.key, act: k.act, func: k.func })), { blank: true }, { blank: true }],
+  // SWAP F1-F4 (manual p.23): touch one (it blinks), then touch the function to put on that bottom key
+  [...[0, 1, 2, 3].map((i) => ({ label: `SWAP F${i + 1}`, swap: i, value: () => swapKey(i).name,
+    act: () => { ui.swapSel = ui.swapSel === i ? null : i; } })), { blank: true }, { blank: true }],
 ];
+// bottom keys of the FT-991A's screen: the functions given to SWAP F1-F4 (by key name), saved in the app
+// (the radio's own assignment cannot be read or set over CAT)
+function swapPool() {
+  return F991_PAGES().flat().filter((it) => !it.blank && !it.na && it.swap == null)
+    .map((it) => ({ name: val(it.label), key: () => (it.value ? it.value() : it.func ? paramText(it.func) : ''), func: it.func,
+      act: () => { it.act?.(); if (it.func) assignFunc(it.func); } }));
+}
+function swapKey(i) {
+  const pool = swapPool(), name = (cfg.swap991 || [])[i] || SOFT_KEYS_991[i].name;
+  return pool.find((k) => k.name === name) || pool.find((k) => k.name === SOFT_KEYS_991[i].name);
+}
 function F991_SCREENS() {
   const pages = F991_PAGES(), n = pages.length;
   return Object.fromEntries(pages.map((keys, i) => [`F ${i + 1}/${n}`, {
@@ -457,6 +482,7 @@ function openPop(name, target = null) {
   if (ui.pop === name && target === ui.target) { closePop(); return; }
   ui.pop = name;
   ui.target = target;
+  if (IS991 && SCREENS[name].f991) ui.multiOn = true; // (function screen up: MULTI works the last chosen function)
   const title = SCREENS[name].title || name;
   $('#popTitle').textContent = target == null ? title : `${title}  ${side(target)}`;
   const grid = $('#popGrid');
@@ -480,6 +506,15 @@ function openPop(name, target = null) {
     if (it.nav) { el.classList.add('nav'); el.dataset.arrow = it.nav; }
     el.addEventListener('click', () => {
       if (it.na) { toast(it.setting ? '設定メニュー（EX）はアプリでは未対応です' : `${val(it.label)} は CAT では操作できません`); return; }
+      if (IS991 && ui.swapSel != null && !it.nav && it.swap == null) {
+        const sw = [0, 1, 2, 3].map((i) => swapKey(i).name);
+        sw[ui.swapSel] = val(it.label);
+        cfg.swap991 = sw; save();
+        toast(`SWAP F${ui.swapSel + 1} に ${val(it.label)} を割り当てました`);
+        ui.swapSel = null;
+        render();
+        return;
+      }
       it.act?.();
       if (it.func) assignFunc(it.func);
       if (it.close) setTimeout(closePop, 350);
@@ -492,6 +527,8 @@ function openPop(name, target = null) {
   render();
 }
 function closePop() {
+  ui.swapSel = null;
+  if (IS991 && SCREENS[ui.pop]?.f991) ui.multiOn = false; // (function screen gone: MULTI tunes again)
   ui.pop = null;
   ui.target = null;
   $('#pop').hidden = true;
@@ -504,20 +541,13 @@ function updatePop() {
     el.classList.toggle('on', !!it.on?.());
     el.classList.toggle('cur', !!it.cur?.());
     el.classList.toggle('func', it.func === cfg.func);
+    el.classList.toggle('swapping', it.swap != null && it.swap === ui.swapSel);
   }
 }
 
-// bottom touch keys of the scope screen (manual p.28-30, product photo):
+// bottom touch keys of the scope screen (manual p.28-30, product photo; FT-991A: SOFT_KEYS_991 above):
 // D-MODE / 3DSS / SPAN / SPEED drive the radio's own scope over CAT (SS); MULTI shows/hides this app's AF-FFT;
 // SCOPE MAIN/SUB follows the operated side (the CAT protocol has no scope-side command).
-// FT-991A: the four keys along the bottom of its screen (manual p.22-23; METER / RF PWR / MIC GAIN as shipped; the fourth
-// is SWEEP on the radio, which starts its own scope sweep and has no CAT command, so here it shows / hides the AF-FFT)
-const SOFT_KEYS_991 = [
-  { name: 'METER', key: () => METERS[cfg.meterSel], act: () => { const k = Object.keys(METERS).map(Number); setMeterSel(k[(k.indexOf(cfg.meterSel) + 1) % k.length]); } },
-  { name: 'RF PWR', key: () => `${s.power}W`, act: () => assignFunc('power'), func: 'power' },
-  { name: 'MIC GAIN', key: () => String(s.mic), act: () => assignFunc('mic'), func: 'mic' },
-  { name: 'AF-FFT', key: () => (cfg.afFft ? 'ON' : 'OFF'), act: () => { cfg.afFft = !cfg.afFft; save(); } },
-];
 const SOFT_KEYS = IS991 ? SOFT_KEYS_991 : [
   { name: 'D-MODE', key: () => SC_DMODE[scopeDmode()], act: () => setScopeMode(scopeType(), (scopeDmode() + 1) % 3) },
   { name: () => scopeType(), key: () => '', act: () => setScopeMode(scopeType() === '3DSS' ? 'W/F' : '3DSS', scopeDmode()) },
@@ -529,13 +559,20 @@ const SOFT_KEYS = IS991 ? SOFT_KEYS_991 : [
 let softKeys = [];
 function setupSoftbar() {
   const bar = $('#softbar');
-  softKeys = SOFT_KEYS.map((k) => {
+  softKeys = SOFT_KEYS.map((k0, i) => {
     const el = document.createElement('button');
     el.className = 'sk';
     el.innerHTML = '<b></b><span></span>';
-    el.addEventListener('click', () => { if (k.pop) openPop(k.pop); else { k.act(); render(); } });
+    // (FT-991A: the function given to SWAP F1-F4)
+    const sk = { get k() { return IS991 ? swapKey(i) : k0; }, el, b: el.firstChild, span: el.lastChild };
+    el.addEventListener('click', () => {
+      const k = sk.k;
+      // (FT-991A: touching the selected RF PWR / MIC GAIN ... key again lets MULTI tune again)
+      if (IS991 && k.func && ui.multiOn && cfg.func === k.func && !SCREENS[ui.pop]?.f991) { ui.multiOn = false; render(); return; }
+      if (k.pop) openPop(k.pop); else { k.act(); render(); }
+    });
     bar.appendChild(el);
-    return { k, el, b: el.firstChild, span: el.lastChild };
+    return sk;
   });
   $('#popClose').addEventListener('click', closePop);
   // touching the filter display opens the filter functions (manual p.23)
@@ -774,7 +811,9 @@ function setupKnobs991() {
     onTurn: (n) => {
       // menu: MULTI moves through the items; after SELECT it changes the value (as on the radio)
       if (!$('#exm').hidden && exSel) { if (ui.exEdit) exAdjust(n); else exMove(n); multi.showFree(); return; }
-      if (cfg.func === 'chd') {
+      // FT-991A: MULTI works the chosen function while the function screen is up (or a bottom key such as RF PWR
+      // is selected); otherwise it tunes in CH DIAL steps, as the radio does
+      if (cfg.func === 'chd' || !ui.multiOn) {
         if (s.lock) { popup('LOCK', 'DIAL LOCK', 0); return; }
         const step = chdSteps()[chdIdx()] * 1000;
         radio.setFreq(0, Math.round(s.freq[0] / step) * step + n * step);
@@ -785,8 +824,9 @@ function setupKnobs991() {
   const cv = new Knob($('#knSubDial'), {
     angular: true, degPerStep: 10, accel: true,
     onTurn: (n) => {
-      if (isSplit()) tune(n, 1);
-      else adjust('clar', n);
+      // (manual p.21: after [CLAR] the knob is the clarifier; otherwise, and in split, it tunes VFO-B)
+      if (s.clarRx[0] || s.clarTx[0]) adjust('clar', n);
+      else tune(n, 1);
       cv.showFree();
     },
   });
@@ -2168,7 +2208,7 @@ function draw() {
   for (const sk of softKeys) {
     sk.b.textContent = val(sk.k.name);
     sk.span.textContent = sk.k.key();
-    sk.el.classList.toggle('open', (!!sk.k.pop && ui.pop === sk.k.pop) || (!!sk.k.func && cfg.func === sk.k.func));
+    sk.el.classList.toggle('open', (!!sk.k.pop && ui.pop === sk.k.pop) || (!!sk.k.func && cfg.func === sk.k.func && (!IS991 || !!ui.multiOn)));
   }
   $('#scope').style.visibility = cfg.afFft ? '' : 'hidden';
   drawCommon(conn);
