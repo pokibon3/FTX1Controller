@@ -690,7 +690,8 @@ export class FTX1 extends EventTarget {
 
   // memory keys: [V/M] (VM), memory -> MAIN VFO (MA), memory tune (VM P2=10)
   vmKey() { this.send('VM;'); this._refreshVfo(0); }
-  memToVfo() { this.send('MA;'); this._refreshVfo(0); }
+  // (MA does nothing in memory mode, checked on the radio: back to VFO first, as [M>V] on the radio)
+  memToVfo() { if (this.s.vm[0].t === 1) this.send('VM000;'); this.send('MA;'); this._refreshVfo(0); }
   // CH: MAIN's memory channel up / down (memory mode), as the main dial
   memStep(up) { this.send(`CH${up ? 0 : 1};`); this._refreshVfo(0); }
   memTune(vfo = 0) { this.send(`VM${vfo}10;`); this._refreshVfo(vfo); }
