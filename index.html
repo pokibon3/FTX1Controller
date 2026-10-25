@@ -21,12 +21,13 @@
 
   <div id="app">
   <aside id="sidebar" aria-label="設定">
+    <!-- (in the browser, not installed: the install button comes up here, js/app.js) -->
+    <div class="inst-top" id="instTop" hidden></div>
     <details open id="secCat">
       <summary>CAT</summary>
         <div class="field"><label>機種（変えるとページを読み込み直します）</label>
           <select id="model"><option value="ftx1">FTX-1</option><option value="ft991a">FT-991A</option></select>
         </div>
-        <div class="row"><button class="btn" id="btnOtherWin" title="もう一方の機種を別のウインドウで開く（2 台同時に使えます）">別ウインドウで開く</button></div>
         <div class="row">
           <button class="btn" id="btnCat" title="前回のポートに接続 / 切断">接続</button>
           <button class="btn" id="btnCatPick" title="ポートを選んで接続（別のポート・初めての接続）">ポートを選ぶ…</button>

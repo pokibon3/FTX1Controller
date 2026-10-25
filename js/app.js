@@ -1486,7 +1486,16 @@ function setupAudio() {
   $('#rxVol').value = cfg.rxVol;
   $('#txGain').value = cfg.txGain;
   $('#txGate').checked = cfg.txGate;
-  ['rxIn', 'rxOut', 'txIn', 'txOut'].forEach((id) => $(`#${id}`).addEventListener('change', (e) => { cfg[AUDIO[id]] = e.target.value; save(); }));
+  // a device changed while its audio runs takes effect at once: outputs switch over, inputs reopen
+  ['rxIn', 'rxOut', 'txIn', 'txOut'].forEach((id) => $(`#${id}`).addEventListener('change', async (e) => {
+    cfg[AUDIO[id]] = e.target.value; save();
+    try {
+      if (id === 'rxOut' && audio.rx) await audio.setRxOutput(e.target.value);
+      if (id === 'txOut' && audio.tx) await audio.setTxOutput(e.target.value);
+      if (id === 'rxIn' && audio.rx) { await audio.stopRx(); await startRxAudio(); }
+      if (id === 'txIn' && audio.tx) { await audio.stopTx(); await startTxAudio(); }
+    } catch (err) { toast(`オーディオデバイスを切り替えられません: ${err.message}`, true); }
+  }));
 
   $('#btnRx').addEventListener('click', () => (audio.rx ? audio.stopRx() : startRxAudio()));
   $('#scope').addEventListener('click', () => { if (!audio.rx) startRxAudio(); });
@@ -1615,10 +1624,6 @@ function setupSettings() {
     const u = new URL(location.href); u.searchParams.set('m', e.target.value); location.href = u.href;
   });
   $$('.model-name').forEach((el) => { el.textContent = MODEL_NAME; });
-  // the other radio in a window of its own (both at once; each window keeps its radio, port and settings)
-  const other = IS991 ? 'ftx1' : 'ft991a';
-  $('#btnOtherWin').textContent = `${IS991 ? 'FTX-1' : 'FT-991A'} を別ウインドウで開く`;
-  $('#btnOtherWin').addEventListener('click', () => { const u = new URL(location.href); u.searchParams.set('m', other); window.open(u.href, `radio-${other}`); });
   { const u = new URL(location.href); if (u.searchParams.get('m') !== MODEL) { u.searchParams.set('m', MODEL); history.replaceState(null, '', u.href); } }
   if (IS991) {
     // FT-991A: one CAT RATE (menu 031) up to 38400 bps; TX2 is an FTX-1 command
@@ -2485,6 +2490,8 @@ let installEvt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
 {
   const inApp = standalone();
+  // in the browser the install button goes to the top of the side panel; the installed app keeps it in SETUP
+  if (!inApp) { $('#instTop').append($('#btnAppInst').parentElement); $('#instTop').hidden = false; }
   $('#btnAppInst').textContent = inApp ? 'アンインストール' : 'インストール';
   $('#appInstHint').textContent = inApp ? 'アプリとして起動中' : 'ブラウザで表示中';
   $('#btnAppInst').addEventListener('click', async () => {

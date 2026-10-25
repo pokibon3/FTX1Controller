@@ -96,6 +96,13 @@ export class AudioEngine extends EventTarget {
     this.dispatchEvent(new Event('state'));
   }
 
+  // switch the playback device of running audio (AudioContext.setSinkId)
+  async setRxOutput(id) { if (this.rx) await this.rx.ctx.setSinkId(id && id !== 'default' ? id : ''); }
+  async setTxOutput(id) {
+    if (!id || id === 'default') throw new Error('TX出力には無線機の USB オーディオを選んでください');
+    if (this.tx) await this.tx.ctx.setSinkId(id);
+  }
+
   setRxVolume(v) {
     if (!this.rx) return;
     this.rx.volume = v;

@@ -49,6 +49,9 @@ button { font: inherit; color: inherit; }
   background: var(--panel); border: 1px solid var(--panel-line); border-radius: 12px; padding: 4px 14px 12px;
 }
 #sidebar details { border-bottom: 1px solid #454a52; padding: 6px 0 12px; }
+/* install button on top of the side panel while the page runs in the browser */
+#sidebar .inst-top { border-bottom: 1px solid #454a52; padding: 8px 0 12px; }
+#sidebar .inst-top[hidden] { display: none; }
 #sidebar details:last-child { border-bottom: 0; }
 #sidebar summary {
   cursor: pointer; list-style: none; padding: 7px 10px 7px 6px; user-select: none;
