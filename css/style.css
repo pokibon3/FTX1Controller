@@ -974,6 +974,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .lcd991 .sk b, .lcd991 .pop.f991 .pt b { font: 700 3.3cqi/1.15 var(--t9-cond); letter-spacing: .1cqi; color: #fff; text-align: center; text-shadow: 0 .15cqi .2cqi rgba(0,0,0,.6); }
 .lcd991 .sk span, .lcd991 .pop.f991 .pt span { display: block; min-height: 3.3cqi; font: 700 2.9cqi/3.3cqi var(--t9-cond); letter-spacing: .25cqi; color: var(--t9-blue);
   text-align: center; background: #000; border-radius: .3cqi; max-width: none; overflow: hidden; }
+/* memory channel list ([A▸M], manual p.92): white lines over the lower screen, the chosen one framed in blue */
+.lcd991 .memlist { position: absolute; inset: 40.3cqi 0 12.2cqi 0; z-index: 6; background: #000; display: flex; flex-direction: column;
+  justify-content: center; gap: .6cqi; padding: 1cqi 3cqi; font: 700 3.6cqi/1.25 var(--t9-cond); letter-spacing: .1cqi; color: #fff; white-space: pre; }
+.lcd991 .memlist[hidden] { display: none; }
+.lcd991 .memlist > div { padding: .2cqi 1cqi; border: .25cqi solid transparent; border-radius: .4cqi; cursor: pointer; }
+.lcd991 .memlist > div.sel { border-color: var(--t9-blue); box-shadow: inset 0 0 0 .1cqi var(--t9-blue); }
 /* SWAP F1-F4 waiting for a function: blinks (as the radio's) */
 .lcd991 .pop.f991 .pt.swapping > * { animation: t9-blink .8s steps(2, jump-none) infinite; }
 @keyframes t9-blink { 50% { opacity: .15; } }
@@ -1020,5 +1026,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .lcd991 #exmSel { flex: 1; color: #fff; }
 .lcd991 #exmDef { flex: 0 0 30%; padding: 0 .6cqi; color: #fff; font-size: 2.5cqi; letter-spacing: 0; white-space: normal; line-height: 1.05; }
 .lcd991 #exmDef:disabled { opacity: .45; }
-.lcd991 .lcd-popup { top: 5cqi; min-width: 44cqi; }
+/* (over the meter row, so the frequencies, the CLAR line and the function keys below stay in view) */
+.lcd991 .lcd-popup { top: 27.4cqi; height: 12.6cqi; min-width: 44cqi; display: flex; flex-direction: column; }
+.lcd991 .lcd-popup .popup-label { padding: .35cqi 1cqi; font-size: 2.1cqi; }
+.lcd991 .lcd-popup .popup-value { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 1.4cqi; font-size: 5.2cqi; line-height: 1; }
+.lcd991 .lcd-popup .popup-bar { margin: 0 1.4cqi 1.2cqi; }
 .lcd991.nosync :is(.t9-vfo, .t9-ch, .t9-clock, #band1, .t9-lvl) { visibility: hidden; }

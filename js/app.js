@@ -135,9 +135,40 @@ const PARAMS = {
     },
   },
   // FT-991A CH DIAL (manual p.41): MULTI tunes in channel steps; the value is the step, chosen per mode group
+  ...(IS991 ? { mch: { name: 'MEMORY CH', get: () => s.memCh || 1, set: (v) => radio.setMemCh(v), min: 1, max: 117, step: 1, fmt: (v) => memChName(v) } } : {}),
   ...(IS991 ? { chd: { name: 'CH DIAL', get: () => chdIdx(), set: (v) => setChdIdx(v), min: 0, max: () => chdSteps().length - 1, step: 1, fmt: (v) => `${chdSteps()[v]}kHz` } } : {}),
 };
 // CH DIAL steps (kHz) as the radio cycles them: AM; FM / C4FM / DATA-FM; CW / SSB / RTTY / DATA-LSB / DATA-USB
+// FT-991A memory channel names: 001-099, then the PMS pairs P-1L / P-1U ... P-9L / P-9U (100-117)
+const memChName = (v) => (v <= 99 ? String(v).padStart(3, '0') : `P-${Math.floor((v - 100) / 2) + 1}${v % 2 ? 'U' : 'L'}`);
+// ---------------- FT-991A memory write (manual p.92) ----------------
+// [A▸M] shows the memory channel list (read with MR) for about 10 s; MULTI moves through it; [A▸M] held writes VFO-A
+// into the chosen channel (MW, which leaves the radio in VFO), as on the radio
+const mwl = { on: false, ch: 1, t: 0 };
+const memRows = () => [-2, -1, 0, 1, 2].map((d) => mwl.ch + d).filter((c) => c >= 1 && c <= 117);
+function memListTimer() { clearTimeout(mwl.t); mwl.t = setTimeout(() => memListShow(false), 10000); }
+function memListRead() { for (const c of memRows()) if (!(c in (s.memList || {}))) radio.readMem(c); }
+function memListShow(on) {
+  if (on && !radio.connected) { toast('CATが接続されていません', true); return; }
+  mwl.on = on;
+  clearTimeout(mwl.t);
+  if (on) { closePop(); mwl.ch = s.memCh || 1; memListRead(); memListTimer(); }
+  render();
+}
+function memListMove(n) { mwl.ch = clamp(mwl.ch + n, 1, 117); memListRead(); memListTimer(); render(); }
+function memListWrite() {
+  if (s.memList) delete s.memList[mwl.ch];
+  radio.writeMem(mwl.ch);
+  popup('A▸M', `MEMORY WRITE ${memChName(mwl.ch)}`, 1);
+  memListShow(false);
+}
+// a list line as the radio's: "01ch  7.000.00 LSB"
+function memLine(c) {
+  const m = s.memList?.[c], n = c <= 99 ? String(c).padStart(2, '0') : memChName(c);
+  if (!m) return `${n}ch  ${m === null ? '---.---.--  ----' : ''}`;
+  const f = m.f;
+  return `${n}ch  ${Math.floor(f / 1e6)}.${String(Math.floor(f / 1e3) % 1000).padStart(3, '0')}.${String(Math.floor(f / 10) % 100).padStart(2, '0')}  ${MODE_NAME[m.mode] || ''}`;
+}
 const CHD_STEPS = { am: [2.5, 5, 9, 10, 12.5, 25], fm: [5, 6.25, 10, 12.5, 15, 20, 25], ssb: [1, 2.5, 5] };
 const chdGroup = () => (['5', 'D'].includes(s.mode[0]) ? 'am' : isFM(s.mode[0]) ? 'fm' : 'ssb');
 const chdSteps = () => CHD_STEPS[chdGroup()];
@@ -175,7 +206,7 @@ radio.addEventListener('change', () => {
 // FT-991A: the MULTI knob's functions as its screen names them (manual p.22), and the ones it can take
 const MULTI_NAME = { power: 'RF-P', mic: 'MIC-G', nb: 'NB-L', shift: 'SHIFT', width: 'WIDTH', notch: 'NOTCH', contour: 'CONT', nr: 'DNR',
   proc: 'PROC', moni: 'MONI', ks: 'SPEED', apf: 'APF', kp: 'PITCH', sql: 'SQL', tone: 'TONE', dcs: 'DCS', clar: 'CLAR',
-  voxGain: 'VOX-G', voxDelay: 'VOX-D', bkDelay: 'BK-D', chd: 'CH-D' };
+  voxGain: 'VOX-G', voxDelay: 'VOX-D', bkDelay: 'BK-D', chd: 'CH-D', mch: 'MCH' };
 if (IS991 && !MULTI_NAME[cfg.func]) cfg.func = 'power';
 if (!PARAMS[cfg.func]) cfg.func = 'af'; // (FTX-1 after the FT-991A's CH DIAL, which it does not have; settings are shared)
 const funcName = () => (IS991 ? MULTI_NAME[cfg.func]
@@ -319,7 +350,7 @@ const F991_PAGES = () => [
     { label: 'MESSAGE', act: () => openPop('MESSAGE') },
     { label: 'PLAY', act: () => openPop('PLAY') },
     { label: 'REC', act: () => openPop('RECORD') },
-    { label: 'MCH', na: true },
+    { label: 'MCH', value: () => memChName(s.memCh || 1), func: 'mch' },
     { label: 'CH DIAL', value: () => `${chdSteps()[chdIdx()]}kHz`, func: 'chd', act: () => { if (cfg.func === 'chd') setChdIdx((chdIdx() + 1) % chdSteps().length); } },
     { label: 'MENU', value: () => 'SETUP', act: () => { closePop(); openSettings(0); } },
   ],
@@ -813,6 +844,8 @@ function setupKnobs991() {
       if (!$('#exm').hidden && exSel) { if (ui.exEdit) exAdjust(n); else exMove(n); multi.showFree(); return; }
       // FT-991A: MULTI works the chosen function while the function screen is up (or a bottom key such as RF PWR
       // is selected); otherwise it tunes in CH DIAL steps, as the radio does
+      if (mwl.on) { memListMove(n); multi.showFree(); return; }
+      if (!ui.multiOn && s.vm[0].t === 1) { adjust('mch', n); multi.showFree(); return; } // (memory mode: channel)
       if (cfg.func === 'chd' || !ui.multiOn) {
         if (s.lock) { popup('LOCK', 'DIAL LOCK', 0); return; }
         const step = chdSteps()[chdIdx()] * 1000;
@@ -985,7 +1018,8 @@ const ACTIONS = {
   nw: { press: () => radio.setNarrow(V(), !s.nar[V()]), hold: () => openPop('MODE') },
   // ◢ key: press swaps MAIN/SUB (SV), hold toggles SPLIT (manual: SPLIT is the long press)
   split: { press: () => radio.swap(), hold: toggleSplit },
-  vm: { press: () => radio.vmKey(), hold: () => { radio.memWrite(); popup('MW', 'MEMORY WRITE', 1); } },
+  // (FT-991A: V/M has no hold function; memory writes go through [A▸M] and its channel list)
+  vm: { press: () => radio.vmKey(), hold: () => { if (IS991) return; radio.memWrite(); popup('MW', 'MEMORY WRITE', 1); } },
   mv: { press: () => radio.memToVfo(), hold: () => { radio.memTune(0); popup('MT', 'MEMORY TUNE', 1); } },
   // no CAT command exists for these
   gm: () => toast('GM は CAT では操作できません'),
@@ -1030,7 +1064,8 @@ const ACTIONS = {
     press: () => { const on = s.clarRx[0] || s.clarTx[0]; radio.setClar(0, !on, false); },
     hold: () => { radio.setClarOffset(0, 0); popup('CLAR', '0Hz', 0.5); },
   },
-  am991: { press: () => toast('メモリーチェックは CAT では操作できません（長押しでメモリー書込）'), hold: () => { radio.memWrite(); popup('A▸M', 'MEMORY WRITE', 1); } },
+  // (manual p.92: [A▸M] shows the memory channel list, MULTI picks the channel, [A▸M] held writes VFO-A there)
+  am991: { press: () => memListShow(!mwl.on), hold: () => (mwl.on ? memListWrite() : memListShow(true)) },  // (held with no list: the list first, nothing written)
   split991: { press: toggleSplit, hold: () => { radio.quickSplit(); popup('SPLIT', 'QUICK SPLIT', 1); } },
   fkey: { press: () => (SCREENS[ui.pop]?.f991 ? closePop() : openPop(Object.keys(SCREENS).find((k) => SCREENS[k].f991))), hold: () => toast('メモリーリストは CAT では表示できません') },
   menu991: { press: () => { if ($('#exm').hidden) { closePop(); openSettings(0); } else closeSettings(); }, hold: () => toast('SETUP（MY CALL など）は CAT では操作できません') },
@@ -2143,7 +2178,22 @@ function statusHtml991() {
   ].filter(Boolean);
   return items.map(([t, c, x, y]) => `<span class="si ${c}" style="left:${x}cqi;top:${y}cqi">${t}</span>`).join('');
 }
+function drawMemList() {
+  let el = $('#memList');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'memList'; el.className = 'memlist'; $('#lcd').appendChild(el);
+    // mouse: the wheel moves through the channels (a notch a channel), a click picks the line
+    const ws = {};
+    el.addEventListener('wheel', (e) => { e.preventDefault(); const n = wheelNotch(e, ws); if (n) memListMove(-wheelAccel(n, ws)); }, { passive: false });
+    el.addEventListener('click', (e) => { const c = +e.target.closest('[data-ch]')?.dataset.ch; if (c) memListMove(c - mwl.ch); });
+  }
+  el.hidden = !mwl.on;
+  if (!mwl.on) return;
+  const html = memRows().map((c) => `<div data-ch="${c}" class="${c === mwl.ch ? 'sel' : ''}">${memLine(c)}</div>`).join('');
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
 function drawFace991(conn) {
+  drawMemList();
   const lcdCls = `lcd lcd991${conn ? (s.synced ? '' : ' nosync') : ' off'}`;
   const lcd = $('#lcd');
   if (lcd.className !== lcdCls) { lcd.className = lcdCls; requestAnimationFrame(fitFreq); }
@@ -2157,7 +2207,7 @@ function drawFace991(conn) {
   // "VFO-" small and "A" large, as on the screen
   const vfoTxt = ['VFO-<b>A</b>', 'MEM', 'MT', 'QMB', 'QMB', 'PMS', 'HOME'][vm.t] || 'VFO-<b>A</b>';
   if ($('#t9Vfo').innerHTML !== vfoTxt) $('#t9Vfo').innerHTML = vfoTxt;
-  setText($('#t9Ch'), vm.t === 1 || vm.t === 2 ? `CH ${String(+vm.ch || 0).padStart(3, '0')}` : '');
+  setText($('#t9Ch'), vm.t === 1 || vm.t === 2 ? `CH ${memChName(+vm.ch || 1)}` : '');
   for (let v = 0; v < 2; v++) {
     const mb = $(`#band${v}`).querySelector('.b-mode'), mn = MODE_NAME[s.mode[v]] || '---';
     mb.textContent = mn;

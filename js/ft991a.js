@@ -24,7 +24,7 @@ export class FT991A extends FTX1 {
   // opened on macOS) its replies come garbled or not at all. Measured on a radio: 1 or 2 stop bits both work.
   rates = [38400, 4800, 9600, 19200]; // menu 031 CAT RATE goes up to 38400
   // (also NR0 / IS0 / BC0 / NA0, refused in some modes, see _levelPoll; logged, not counted as errors)
-  modeDependent = /^(MG|RA|NR0|IS0|BC0|NA0)/;
+  modeDependent = /^(MG|RA|NR0|IS0|BC0|NA0|MC|MR)/;
   async _afterOpen() { await this.link.setSignals({ requestToSend: true, dataTerminalReady: false }).catch(() => {}); }
 
   // ---- polling ----
@@ -33,7 +33,7 @@ export class FT991A extends FTX1 {
       'AG0;', 'RG0;', 'SQ0;', 'PC;', 'MG;', 'KS;', 'KP;', 'BI;', 'VX;', 'VG;', 'ML0;', 'ML1;',
       'NB0;', 'NL0;', 'RL0;', 'NA0;', 'BC0;', 'BP00;', 'BP01;', 'CO00;', 'CO01;', 'CO02;', 'CO03;',
       'RA0;', 'PA0;', 'GT0;', 'SH0;', 'LK;', 'AC;', 'CS;', 'FS;', 'MS;', 'BY;', 'RI0;',
-      'MX;', 'TS;', 'KR;', 'PR0;', 'PR1;', 'PL;', 'VD;', 'SD;', 'OS0;', 'CT0;', 'CN00;', 'CN01;', 'AI;'].forEach((c) => this.send(c, { read: true }));
+      'MC;', 'MX;', 'TS;', 'KR;', 'PR0;', 'PR1;', 'PL;', 'VD;', 'SD;', 'OS0;', 'CT0;', 'CN00;', 'CN01;', 'AI;'].forEach((c) => this.send(c, { read: true }));
   }
   _slowPoll() {
     const p = { poll: true };
@@ -64,6 +64,7 @@ export class FT991A extends FTX1 {
         if (p.length < 21) break;
         if (this.MODE_OK(p[19]) && ok('MD' + vfo)) s.mode[vfo] = p[19];
         if (/^[0-6]$/.test(p[20])) s.vm[vfo] = { t: +p[20], ch: p.slice(0, 3) };
+        if (vfo === 0 && /^\d{3}$/.test(p.slice(0, 3)) && +p.slice(0, 3) && ok('MC')) s.memCh = +p.slice(0, 3);
         if (vfo === 0) {
           if (ok('CFf0')) s.clarOfs[0] = (p[12] === '-' ? -1 : 1) * (num(13, 17) || 0);
           if (ok('CFs0')) { s.clarRx[0] = p[17] === '1'; s.clarTx[0] = p[18] === '1'; }
@@ -74,6 +75,14 @@ export class FT991A extends FTX1 {
       case 'SQ': if (ok('SQ0')) s.sql[0] = sqIn(num(1, 4) || 0); break;
       case 'PC': if (ok('PC')) s.power = num(0, 3) || 0; break;
       case 'FT': if (ok('FT')) s.ft = p[0] === '1' ? 1 : 0; break;
+      // MR (memory channel read): P1 ch + freq (9) + clar (5) + RX / TX clar + mode + ...; an empty channel answers '?'
+      case 'MR': {
+        const ch = this._mrQ?.shift() ?? +p.slice(0, 3);
+        const f = p.slice(3, 12);
+        if (ch) s.memList = { ...s.memList, [ch]: /^\d{9}$/.test(f) && +f ? { f: +f, mode: p[19] } : null };
+        break;
+      }
+      case 'MC': if (ok('MC') && /^\d{3}$/.test(p) && +p) s.memCh = +p; break;
       case 'MS': if (ok('MS') && MS_IN[p[0]]) s.ms = [MS_IN[p[0]], MS_IN[p[0]]]; break;
       // NB / NR: on-off and level are separate commands; the app's level is 0 when off
       case 'NB': if (ok('NB0')) { s.nbOn = p[1] === '1'; s.nb[0] = s.nbOn ? s.nbLv : 0; } break;
@@ -218,6 +227,27 @@ export class FT991A extends FTX1 {
     this._changed();
     clearTimeout(this.clarRead);
     this.clarRead = setTimeout(() => this.send('IF;', { read: true }), 1300);
+  }
+  // memory list rows: MR per channel (an empty one answers '?', which takes its place in the queue)
+  readMem(ch) { (this._mrQ ||= []).push(ch); this.send(`MR${String(ch).padStart(3, '0')};`, { read: true }); }
+  _onMessage(m) {
+    if (m === '?' && /^MR/.test(this.pending?.[0] || '')) {
+      const ch = this._mrQ?.shift();
+      if (ch) this.s.memList = { ...this.s.memList, [ch]: null };
+    }
+    super._onMessage(m);
+  }
+  // MW: VFO-A (frequency, clarifier, mode, tone / DCS mode, repeater shift) into a memory channel, as [A>M] held
+  writeMem(ch) {
+    const s = this.s, o = s.clarOfs[0] || 0;
+    this.send(`MW${String(ch).padStart(3, '0')}${String(s.freq[0]).padStart(9, '0')}${o < 0 ? '-' : '+'}${String(Math.abs(o)).padStart(4, '0')}` +
+      `${s.clarRx[0] ? 1 : 0}${s.clarTx[0] ? 1 : 0}${s.mode[0]}0${s.ct?.[0] || 0}00${s.os?.[0] || 0};`);
+    setTimeout(() => this.readMem(ch), 300);
+  }
+  // MC: memory channel 001-117 (001-099, then P-1L / P-1U ... P-9L / P-9U); in memory mode it is recalled
+  setMemCh(ch) {
+    this._set('MC', `MC${String(ch).padStart(3, '0')};`, () => { this.s.memCh = ch; });
+    setTimeout(() => this.send('IF;', { read: true }), 150);
   }
   setScan(on) { this._set('SC', `SC${on ? 1 : 0};`, () => { this.s.scan = on; }); }
   quickSplit() { this.send('QS;'); setTimeout(() => ['FB;', 'FT;', 'OI;'].forEach((c) => this.send(c, { read: true })), 300); }
