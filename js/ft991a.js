@@ -23,6 +23,7 @@ export class FT991A extends FTX1 {
   // RTS on (the radio answers only then while menu 033 CAT RTS is ENABLE) and DTR off: with DTR on (as a port is often
   // opened on macOS) its replies come garbled or not at all. Measured on a radio: 1 or 2 stop bits both work.
   rates = [38400, 4800, 9600, 19200]; // menu 031 CAT RATE goes up to 38400
+  ids = ['0570', '0670']; // FT-991 / FT-991A
   // (also NR0 / IS0 / BC0 / NA0, refused in some modes, see _levelPoll; logged, not counted as errors)
   modeDependent = /^(MG|RA|NR0|IS0|BC0|NA0|MC|MR)/;
   async _afterOpen() { await this.link.setSignals({ requestToSend: true, dataTerminalReady: false }).catch(() => {}); }
@@ -35,11 +36,14 @@ export class FT991A extends FTX1 {
       'RA0;', 'PA0;', 'GT0;', 'SH0;', 'LK;', 'AC;', 'CS;', 'FS;', 'MS;', 'BY;', 'RI0;',
       'MC;', 'MX;', 'TS;', 'KR;', 'PR0;', 'PR1;', 'PL;', 'VD;', 'SD;', 'OS0;', 'CT0;', 'CN00;', 'CN01;', 'AI;'].forEach((c) => this.send(c, { read: true }));
   }
+  _fastPoll() { if (!this.s.radioOff) super._fastPoll(); }
   _slowPoll() {
+    if (this.s.radioOff) return;
     const p = { poll: true };
     ['TX;', 'FA;', 'FB;', 'IF;', 'OI;', 'BY;', 'RI0;'].forEach((c) => this.send(c, p));
   }
   _levelPoll() {
+    if (this.s.radioOff) return;
     const p = { poll: true };
     if (bandType(this.s.freq[0]) === 0) this.send('RA0;', p);
     // reads the radio answers '?' to in some modes (tried on the radio in each mode): NR0 in FM / FM-N / DATA-FM / C4FM,
@@ -229,8 +233,58 @@ export class FT991A extends FTX1 {
     this.clarRead = setTimeout(() => this.send('IF;', { read: true }), 1300);
   }
   // memory list rows: MR per channel (an empty one answers '?', which takes its place in the queue)
+  // ---- power (PS) ----
+  // The FT-991A's USB stays up with the radio switched off; CAT then gets no answer at all. Quiet for 4 s, the radio
+  // counts as off: the polls stop and PS; is asked every 2 s, and its first answer brings everything back.
+  // With the radio already off when the app connects, standby() holds the port the same way.
+  _startPolling() { super._startPolling(); this.timers.push(setInterval(() => this._powerWatch(), 1000)); }
+  _powerWatch() {
+    const s = this.s;
+    if (!s.radioOff && performance.now() - s.lastRx > 4000) this._setOff(true);
+    if (s.radioOff && (this._psTick = (this._psTick || 0) + 1) % 2 === 0) this.link.write('PS;').catch(() => {});
+  }
+  _setOff(off) {
+    const s = this.s;
+    s.radioOff = off;
+    if (off) { s.synced = false; s.tx = false; this.queue = this.queue.filter((q) => !q.poll); this.pending = []; }
+    this._emit('power');
+    this._changed();
+  }
+  _wake() {
+    this._setOff(false);
+    if (this._standby) {
+      // (connected while off: what connect() does once the radio has answered)
+      this._standby = false;
+      this.s.errors = 0;
+      this.smSeen = this.rmSeen = false;
+      this.smPolls = 0;
+      this._emit('connection');
+    }
+    this.readAll();
+    this.send('AI1;');
+    this._startPolling();
+  }
+  async standby(port, baud) {
+    await this.link.open(port, baud);
+    await this._afterOpen();
+    Object.assign(this, { baud, port, pending: [], _standby: true, _psTick: 0 });
+    this.s.lastRx = 0;
+    this._setOff(true);
+    this._stopPolling();
+    this.timers.push(setInterval(() => this._powerWatch(), 1000));
+    this._emit('connection');
+  }
+  // PS1 (manual: dummy data, about a second, then PS1 within 2 s); the PS; polls then see it come up
+  async powerOn() {
+    if (!this.connected) return;
+    await this.link.write('PS;').catch(() => {});
+    await new Promise((r) => setTimeout(r, 1000));
+    await this.link.write('PS1;').catch(() => {});
+  }
+  powerOff() { this.send('PS0;'); setTimeout(() => { if (this.connected) this._setOff(true); }, 500); }
   readMem(ch) { (this._mrQ ||= []).push(ch); this.send(`MR${String(ch).padStart(3, '0')};`, { read: true }); }
   _onMessage(m) {
+    if (this.s.radioOff) this._wake();
     if (m === '?' && /^MR/.test(this.pending?.[0] || '')) {
       const ch = this._mrQ?.shift();
       if (ch) this.s.memList = { ...this.s.memList, [ch]: null };

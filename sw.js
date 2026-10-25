@@ -29,6 +29,7 @@ self.addEventListener('fetch', (e) => {
         caches.open(VERSION).then((c) => c.put(e.request, copy));
         return res;
       })
-      .catch(() => caches.match(e.request)),
+      // (offline: index.html?m=ft991a falls back to the cached page whatever its query)
+      .catch(() => caches.match(e.request).then((r) => r || caches.match(e.request, { ignoreSearch: true }))),
   );
 });

@@ -205,6 +205,7 @@ export class FTX1 extends EventTarget {
   async connect(port, baud) {
     const rates = baud === 'auto' ? this.rates : [+baud];
     this.probing = true;
+    this.wrongId = null;
     let opened = false, openErr = null;
     try {
       for (const b of rates) for (const stopBits of this.stopBitsTry) {
@@ -249,8 +250,9 @@ export class FTX1 extends EventTarget {
     }
     // the port never opened in any format: report that, not "no reply"
     if (!opened && openErr) throw openErr;
-    const err = new Error('CAT応答なし');
-    err.code = 'NO_REPLY';
+    const err = new Error(this.wrongId ? `別の機種（ID ${this.wrongId}）` : 'CAT応答なし');
+    err.code = this.wrongId ? 'WRONG_RADIO' : 'NO_REPLY';
+    err.id = this.wrongId;
     throw err;
   }
 
@@ -261,10 +263,13 @@ export class FTX1 extends EventTarget {
   // CAT rates tried by 'auto', in this order
   rates = [38400, 4800, 9600, 19200, 115200];
 
+  // ID answers of this radio (CAT manual 2512-D: 0840; 0800 in 2508-C)
+  ids = ['0800', '0840'];
   async _probe() {
     for (let i = 0; i < 2; i++) {
       const got = await new Promise((resolve) => {
-        const on = (e) => { if (/^ID\d+/.test(e.detail)) done(true); };
+        // (an ID of another radio, e.g. the other one on the same kind of USB bridge, counts as no answer)
+        const on = (e) => { const m = /^ID(\d+)/.exec(e.detail); if (m) { if (this.ids.includes(m[1])) done(true); else { this.wrongId = m[1]; done(false); } } };
         const done = (v) => { clearTimeout(t); this.link.removeEventListener('message', on); resolve(v); };
         const t = setTimeout(() => done(false), 500);
         this.link.addEventListener('message', on);
@@ -275,6 +280,8 @@ export class FTX1 extends EventTarget {
     return false;
   }
 
+  // PS0: the radio switches itself off (the FTX-1's USB goes with it, which closes the port)
+  powerOff() { this.send('PS0;'); }
   async disconnect() {
     if (!this.connected) return;
     this.queue.length = 0;

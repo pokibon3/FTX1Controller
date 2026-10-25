@@ -21,6 +21,19 @@
 
   <div id="app">
   <aside id="sidebar" aria-label="設定">
+    <details open id="secCat">
+      <summary>CAT</summary>
+        <div class="field"><label>機種（変えるとページを読み込み直します）</label>
+          <select id="model"><option value="ftx1">FTX-1</option><option value="ft991a">FT-991A</option></select>
+        </div>
+        <div class="row"><button class="btn" id="btnOtherWin" title="もう一方の機種を別のウインドウで開く（2 台同時に使えます）">別ウインドウで開く</button></div>
+        <div class="row">
+          <button class="btn" id="btnCat" title="前回のポートに接続 / 切断">接続</button>
+          <button class="btn" id="btnCatPick" title="ポートを選んで接続（別のポート・初めての接続）">ポートを選ぶ…</button>
+        </div>
+        <p class="hint" id="catState">未接続</p>
+        <label class="chk"><input type="checkbox" id="catAuto"> 起動時と本体の電源 ON で自動接続</label>
+    </details>
     <details open id="secRx">
       <summary>USB AUDIO <span class="tag">RX</span></summary>
         <div class="field"><label>入力（<span class="model-name">FTX-1</span>）</label><select id="rxIn"></select></div>
@@ -66,9 +79,19 @@
     </details>
     <details open id="secSet">
       <summary>SETUP</summary>
-        <div class="field"><label>機種（変えるとページを読み込み直します）</label>
-          <select id="model"><option value="ftx1">FTX-1</option><option value="ft991a">FT-991A</option></select>
+        <div class="row"><button class="btn" id="btnAppInst">アプリ</button><span class="hint" id="appInstHint"></span></div>
+        <div class="field"><label>PTT 方式</label>
+          <select id="pttMethod">
+            <option value="cat1">CAT (TX1)</option>
+            <option value="cat2">CAT (TX2 / DATA)</option>
+            <option value="rts">RTS</option>
+            <option value="dtr">DTR</option>
+          </select>
         </div>
+        <label class="chk"><input type="checkbox" id="pttLatch"> TX ボタンを LATCH（クリックで送受切替）</label>
+    </details>
+    <details id="secAdv">
+      <summary>詳細設定</summary>
         <div class="field"><label>CAT ボーレート</label>
           <select id="baud">
             <option value="auto" selected>自動検出</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>115200</option>
@@ -80,19 +103,8 @@
             <button class="btn" id="btnRadioBaud" title="本体のメニュー CAT-1 RATE / CAT-2 RATE に書き込み、新しい速度で再接続">書込</button>
           </div>
         </div>
-        <label class="chk"><input type="checkbox" id="showConsole"> CAT CONSOLE を表示</label>
-        <div class="row"><button class="btn" id="btnAppInst">アプリ</button><span class="hint" id="appInstHint"></span></div>
-        <label class="chk"><input type="checkbox" id="pttLatch"> TX ボタンを LATCH（クリックで送受切替）</label>
-        <div class="field"><label>PTT 方式</label>
-          <select id="pttMethod">
-            <option value="cat1">CAT (TX1)</option>
-            <option value="cat2">CAT (TX2 / DATA)</option>
-            <option value="rts">RTS</option>
-            <option value="dtr">DTR</option>
-          </select>
-        </div>
         <div class="row">
-          <button class="btn" id="btnPttPort" title="本体の 2 本目のシリアルポート（POWER で選んだのとは別のポート。Windows では Standard COM Port）を開く。CW の直接キーイングと、RTS/DTR 方式の PTT に使う">CWキーイング</button>
+          <button class="btn" id="btnPttPort" title="本体の 2 本目のシリアルポート（CAT 欄で選んだのとは別のポート。Windows では Standard COM Port）を開く。CW の直接キーイングと、RTS/DTR 方式の PTT に使う">CWキーイング</button>
           <span class="hint" id="pttPortState">未接続（CATポートを使用）</span>
         </div>
         <div class="field"><label>ダイヤル分解能</label>
@@ -107,6 +119,7 @@
           <select id="scopeSpan"><option value="3000">3 kHz</option><option value="4000">4 kHz</option><option value="6000">6 kHz</option><option value="12000">12 kHz</option></select>
         </div>
         <p class="hint">キー操作: ↑↓ 同調 / Shift+↑↓ ×10 / PageUp・PageDown バンド / Space 送信</p>
+        <label class="chk"><input type="checkbox" id="showConsole"> CAT CONSOLE を表示</label>
     </details>
   </aside>
 
@@ -114,7 +127,7 @@
   <main class="radio" id="radio">
     <!-- top edge keys (long flat keys with the legend printed below, as on the field head) -->
     <div class="top-edge">
-      <button class="tkey-cat" id="btnConnect" title="電源（CAT ポートに接続 / 切断）"><span class="tled"></span>POWER</button>
+      <button class="tkey-cat" id="btnConnect" title="本体の電源 ON / OFF（CAT の接続は左の CAT 欄）"><span class="tled"></span>POWER</button>
       <!-- top edge as on the radio: five flat keys with legends below + the orange model print, then three keys -->
       <div class="te-main">
         <div class="te-keys">
@@ -233,7 +246,7 @@
   <template id="head991">
   <main class="radio r991" id="radio">
     <button class="tkey-cat tkey-menu" id="btnMenu" title="USB AUDIO / CW DECODER / SETUP パネルの表示切替" aria-label="メニュー">&#9776;</button>
-    <div class="r9-pw"><span class="r9-lab">ON/OFF</span><button class="r9-power" id="btnConnect" title="電源（CAT ポートに接続 / 切断）"><span class="tled"></span><svg class="r9-pwsym" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M7.1 6.6a7 7 0 1 0 9.8 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>
+    <div class="r9-pw"><span class="r9-lab">ON/OFF</span><button class="r9-power" id="btnConnect" title="本体の電源 ON / OFF（CAT の接続は左の CAT 欄）"><span class="tled"></span><svg class="r9-pwsym" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M7.1 6.6a7 7 0 1 0 9.8 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button></div>
     <button class="txbtn r9-tx" id="btnPtt" title="押している間送信（Space キーでも可。SETUP の LATCH でクリック切替）">TX</button>
 
     <div class="r9-bezel"></div>

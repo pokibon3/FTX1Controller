@@ -3,7 +3,7 @@ import {
   widthText, widthHz, widthMin, widthMax, sText, S_TICKS, isCW, isFM,
 } from './ftx1.js';
 import { FT991A } from './ft991a.js';
-import { IS991, MODEL_NAME } from './model.js';
+import { MODEL, IS991, MODEL_NAME, CFG_KEY } from './model.js';
 import { Meter991 } from './meter991.js';
 import { EX_MENUS_991 } from './exmenu991.js';
 import { EX_DEFAULTS_991 } from './exdefaults991.js';
@@ -49,7 +49,8 @@ const DEFAULTS = {
   sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, ft8Mode: 'FT8', pcSql: true, dec: true, decCh: 'L', decGain: 0, decNr: true, console: false,
 };
 const cfg = (() => {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ftx1.cfg') || '{}') }; } catch { return { ...DEFAULTS }; }
+  // (each radio its own settings; the FT-991A's start from the ones shared before v1.38.0)
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(CFG_KEY) ?? (IS991 ? localStorage.getItem('ftx1.cfg') : null) ?? '{}') }; } catch { return { ...DEFAULTS }; }
 })();
 if (!['auto', 1, 10, 20, 50, 100, 200, 500, 1000, 2500, 5000, 6250, 10000, 12500, 25000].includes(cfg.step)) cfg.step = 'auto';
 if (![3, 4, 5, 6, 7, 8].includes(cfg.meterSel) || (IS991 && cfg.meterSel === 8)) cfg.meterSel = 5; // the FT-991A has no VDD meter
@@ -58,7 +59,7 @@ cfg.console = false;
 cfg.sidebar = false;
 // v1.6: the default screen became L/R (as on the radio); switch saved settings over once
 if (!cfg.layoutV2) { cfg.layout = 'lr'; cfg.layoutV2 = true; }
-function save() { try { localStorage.setItem('ftx1.cfg', JSON.stringify(cfg)); } catch {} }
+function save() { try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch {} }
 
 const STEPS = ['auto', 1, 10, 50, 100, 500, 1000, 2500, 5000, 6250, 10000, 12500, 25000];
 const LAYOUTS = ['lr', 'ud', 'single'];
@@ -1136,19 +1137,22 @@ function onConnected(baud) {
   // the radio's dial steps, for STEP AUTO
   if (!IS991) for (const k of ['030601', '030602', '030603']) radio.send(`EX${k};`, { read: true });
 }
-async function toggleConnect(e) {
+// CAT (left panel): connect to the port used last time, or pick one; disconnect. auto: no picker (page load, the
+// radio switched on); the FT-991A, whose USB stays up with the radio off, is then held in standby until it answers
+async function toggleConnect(e, { auto = false } = {}) {
   if (e?.shiftKey) ui.forcePick = true;
   if (!('serial' in navigator)) { toast('Web Serial 非対応のブラウザです', true); return; }
   if (radio.connected) {
-    // POWER off: the radio's audio and second port go too (they come back by themselves at the next POWER on)
+    // disconnect: the radio's audio and second port go too (they come back by themselves at the next connect)
     await setPtt(false);
     await radio.disconnect();
     await audio.stopRx();
     await audio.stopTx();
-    if (ui.pttLink?.isOpen) { await ui.pttLink.close().catch(() => {}); ui.pttLink = null; $('#pttPortState').textContent = '未接続（POWER ON で自動接続）'; }
+    if (ui.pttLink?.isOpen) { await ui.pttLink.close().catch(() => {}); ui.pttLink = null; $('#pttPortState').textContent = '未接続（CAT 接続で自動接続）'; }
     return;
   }
-  $('#btnConnect').classList.add('connecting');
+  // (the lamp blinks yellow while a port is tried; an automatic connect lights it only once there is a port to try)
+  if (!auto) $('#btnConnect').classList.add('connecting');
   // POWER: reconnect to the port used last time (already granted, same USB IDs, same position) without the picker;
   // Shift+click, or no answer from the remembered port, opens the picker
   if (!ui.forcePick) {
@@ -1159,15 +1163,36 @@ async function toggleConnect(e) {
       const order = [same[last?.idx], ...same].filter((p, i, a) => p && a.indexOf(p) === i);
       // only the rate that worked last time, so a port that does not answer leads to the picker within a second or two
       // (it has to open while Chrome still counts the click)
+      const tried = cfg[CATBAUD] === 'auto' && last.baud ? last.baud : cfg[CATBAUD];
       for (const p of order) {
+        $('#btnConnect').classList.add('connecting');
         try {
-          const baud = await radio.connect(p, cfg[CATBAUD] === 'auto' && last.baud ? last.baud : cfg[CATBAUD]);
+          const baud = await radio.connect(p, tried);
           last.baud = baud; save();
+          $('#btnConnect').classList.remove('connecting');
           onConnected(baud);
           return;
-        } catch {}
+        } catch (err) {
+          // (another radio on the same kind of USB bridge answers with its own ID: not this one, try the next port)
+          // FT-991A switched off: its port is there but silent; hold it and wait for the radio (or POWER on). Silent at
+          // the remembered rate may also be the other radio at another rate, so the other rates are asked first
+          if (IS991 && err.code === 'NO_REPLY' && p === order[0]) {
+            let other = false;
+            for (const r of [38400, 19200, 9600, 4800, 115200].filter((x) => x !== +tried)) {
+              try { const b = await radio.connect(p, r); last.baud = b; save(); onConnected(b); return; }
+              catch (e2) { if (e2.code !== 'NO_REPLY') { other = true; break; } }
+            }
+            if (other) continue;
+            await radio.standby(p, last.baud || (cfg[CATBAUD] === 'auto' ? 38400 : +cfg[CATBAUD]));
+            ui.standby = true;
+            $('#btnConnect').classList.remove('connecting');
+            if (!auto) toast(`${MODEL_NAME}の電源が切れています（電源ボタンで入れられます）`);
+            return;
+          }
+        }
       }
     } catch {}
+    if (auto) { $('#btnConnect').classList.remove('connecting'); return; }
   }
   ui.forcePick = false;
   let port;
@@ -1183,7 +1208,9 @@ async function toggleConnect(e) {
     onConnected(baud);
     return;
   } catch (e) {
-    if (e.code === 'NO_REPLY') {
+    if (e.code === 'WRONG_RADIO') {
+      toast(`このポートは${MODEL_NAME}ではありません（${e.message}）。${MODEL_NAME}のポートを選んでください`, true);
+    } else if (e.code === 'NO_REPLY') {
       toast(cfg[CATBAUD] === 'auto'
         ? `このポートはCATに応答しません。${MODEL_NAME}のもう一方のシリアルポートを選んでください（受信した内容は CAT CONSOLE に出ています）`
         : `${cfg[CATBAUD]}bpsで応答がありません。ボーレートを「自動」にするか、もう一方のポートを選んでください`, true);
@@ -1194,7 +1221,31 @@ async function toggleConnect(e) {
     $('#btnConnect').classList.remove('connecting');
   }
 }
+// the radio's power, seen over CAT (FT-991A: answers stop / come back; FTX-1: its USB goes / comes)
+radio.addEventListener('power', () => {
+  if (!s.radioOff && ui.standby) { ui.standby = false; onConnected(radio.baud); return; }
+  if (!s.radioOff) toast(`${MODEL_NAME}の電源が入りました`);
+  else if (radio.connected && !ui.standby) { setPtt(false); toast(`${MODEL_NAME}の電源が切れました`); }
+  render();
+});
+// POWER key: the radio's power. Off: PS0 after a confirmation. On: FT-991A PS1 (its port stays with the radio off);
+// the FTX-1 has no CAT power-on and its USB goes with the power, so it is switched on at the radio and connects by itself
+async function powerKey() {
+  if (!('serial' in navigator)) { toast('Web Serial 非対応のブラウザです', true); return; }
+  if (!radio.connected) {
+    await toggleConnect(null, { auto: true });
+    if (!radio.connected) {
+      toast(IS991 ? '左の CAT 欄で接続してください' : `${MODEL_NAME}の電源スイッチで電源を入れてください（入ると自動で接続します）`, true, 6000);
+      return;
+    }
+  }
+  if (s.radioOff) { radio.powerOn?.(); popup('POWER', 'ON', 1); return; }
+  if (!confirm(`${MODEL_NAME}の電源を切りますか？`)) return;
+  await setPtt(false);
+  radio.powerOff();
+}
 radio.addEventListener('connection', () => {
+  if (!radio.connected) ui.standby = false;
   logLine('sys', radio.connected ? `connected @ ${radio.baud}bps` : 'disconnected');
   if (!radio.connected) { ui.ptt = false; clearTimeout(ui.totTimer); audio.setTxOpen(!cfg.txGate); }
   render();
@@ -1251,7 +1302,7 @@ async function togglePttPort() {
     port = await navigator.serial.requestPort();
   } catch { return; } // picker cancelled
   if (port === radio.link?.port) {
-    toast('選んだのは POWER（CAT）で使用中のポートです。もう一度「CWキーイング」を押して、もう一方を選んでください', true, 7000);
+    toast('選んだのは CAT で使用中のポートです。もう一度「CWキーイング」を押して、もう一方を選んでください', true, 7000);
     return;
   }
   try {
@@ -1557,12 +1608,18 @@ function setupSettings() {
   // radio model: the page is built for one radio, so a change reloads it (the CAT link is closed first)
   $('#model').value = IS991 ? 'ft991a' : 'ftx1';
   $('#model').addEventListener('change', async (e) => {
-    cfg.model = e.target.value;
-    save();
-    if (radio.connected) { await setPtt(false); await radio.disconnect(); }
-    location.reload();
+    try { localStorage.setItem('ftx1.model', e.target.value); } catch {}
+    // (a radio that went away can leave the port hanging: reload anyway after a second)
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    if (radio.connected) await Promise.race([(async () => { await setPtt(false); await radio.disconnect(); })().catch(() => {}), wait(1000)]);
+    const u = new URL(location.href); u.searchParams.set('m', e.target.value); location.href = u.href;
   });
   $$('.model-name').forEach((el) => { el.textContent = MODEL_NAME; });
+  // the other radio in a window of its own (both at once; each window keeps its radio, port and settings)
+  const other = IS991 ? 'ftx1' : 'ft991a';
+  $('#btnOtherWin').textContent = `${IS991 ? 'FTX-1' : 'FT-991A'} を別ウインドウで開く`;
+  $('#btnOtherWin').addEventListener('click', () => { const u = new URL(location.href); u.searchParams.set('m', other); window.open(u.href, `radio-${other}`); });
+  { const u = new URL(location.href); if (u.searchParams.get('m') !== MODEL) { u.searchParams.set('m', MODEL); history.replaceState(null, '', u.href); } }
   if (IS991) {
     // FT-991A: one CAT RATE (menu 031) up to 38400 bps; TX2 is an FTX-1 command
     // the radio's CAT RATE is menu 031 (MENU screen), which reconnects by itself: no separate setting here
@@ -1594,11 +1651,22 @@ function setupSettings() {
       save();
       toast(`本体の ${which} を ${rate}bps にしました`);
     } catch (e) {
-      toast(`変更後の再接続に失敗しました: ${e.message}（POWER で接続し直してください）`, true);
+      toast(`変更後の再接続に失敗しました: ${e.message}（左の CAT 欄で接続し直してください）`, true);
     }
   });
   $('#btnPttPort').addEventListener('click', togglePttPort);
-  $('#btnConnect').addEventListener('click', toggleConnect);
+  $('#btnConnect').addEventListener('click', powerKey);
+  $('#btnCat').addEventListener('click', (e) => toggleConnect(e));
+  $('#btnCatPick').addEventListener('click', () => { if (radio.connected) return; ui.forcePick = true; toggleConnect(); });
+  $('#catAuto').checked = cfg.catAuto !== false;
+  $('#catAuto').addEventListener('change', (e) => { cfg.catAuto = e.target.checked; save(); });
+  // auto connect: at page load, and when the radio's USB appears (FTX-1 switched on, a cable plugged in)
+  if ('serial' in navigator) {
+    navigator.serial.addEventListener('connect', () => {
+      if (cfg.catAuto !== false && !radio.connected) setTimeout(() => { if (!radio.connected) toggleConnect(null, { auto: true }); }, 2500);
+    });
+    if (cfg.catAuto !== false) setTimeout(() => { if (!radio.connected) toggleConnect(null, { auto: true }); }, 800);
+  }
 }
 
 // ---------------- CW decoder (on RX audio) ----------------
@@ -2247,7 +2315,11 @@ function drawFace991(conn) {
 
 function draw() {
   const conn = radio.connected;
-  $('#btnConnect').classList.toggle('on', conn);
+  $('#btnConnect').classList.toggle('on', conn && !s.radioOff && !ui.standby);
+  $('#btnCat').textContent = conn ? '切断' : '接続';
+  $('#btnCat').classList.toggle('on', conn);
+  $('#btnCatPick').disabled = conn;
+  setText($('#catState'), !conn ? '未接続' : `接続中 ${radio.baud}bps${s.id ? ` / ID ${s.id}` : ''} / 本体電源 ${s.radioOff || ui.standby ? 'OFF' : 'ON'}`);
   if (IS991) drawFace991(conn); else drawFaceFtx1(conn);
   drawStatusbar();
   $('#funcBox').textContent = funcName();
