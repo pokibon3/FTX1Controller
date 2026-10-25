@@ -173,9 +173,14 @@ function memListMove(n) { mwl.ch = clamp(mwl.ch + n, 1, MEM_MAX); memListRead();
 function memListWrite() {
   if (s.memList) delete s.memList[mwl.ch];
   radio.writeMem(mwl.ch);
-  popup(IS991 ? 'A▸M' : 'V/M', `MEMORY WRITE ${memChName(mwl.ch)}`, 1);
-  if (IS991) memListShow(false); else render();
+  // (FTX-1: said once the channel has been read back)
+  if (IS991) { popup('A▸M', `MEMORY WRITE ${memChName(mwl.ch)}`, 1); memListShow(false); } else render();
 }
+radio.addEventListener('memwrite', (e) => {
+  const { ch, ok } = e.detail;
+  if (ok) popup('V/M', `MEMORY WRITE ${memChName(ch)}`, 1);
+  else { popup('V/M', `WRITE FAILED ${memChName(ch)}`, 0); toast(`${memChName(ch)} に書き込めませんでした`, true); }
+});
 // FTX-1 list keys: FUNC press recalls the channel, [M▸V] copies it to the VFO, NAME sets its tag
 function memListRecall() {
   if (!s.memList?.[mwl.ch]) { popup('MEMORY', `${memChName(mwl.ch)} EMPTY`, 0); return; }

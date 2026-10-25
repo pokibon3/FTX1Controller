@@ -402,7 +402,7 @@ export class FTX1 extends EventTarget {
       // an empty memory channel answers MR / MT with '?'
       if (/^M[RT]/.test(bad || '')) {
         const ch = (bad[1] === 'R' ? this._mrQ : this._mtQ)?.shift();
-        if (ch && bad[1] === 'R') s.memList = { ...s.memList, [ch]: null };
+        if (ch && bad[1] === 'R') { s.memList = { ...s.memList, [ch]: null }; this._mwDone(ch); }
         this._changed();
         return;
       }
@@ -454,6 +454,7 @@ export class FTX1 extends EventTarget {
         if (ch) {
           s.memList = { ...s.memList, [ch]: /^\d{9}$/.test(f) && +f ? { f: +f, mode: p[21], tag: s.memList[ch]?.tag || '' } : null };
           if (s.memList[ch]) { (this._mtQ ||= []).push(ch); this.send(`MT${this.memId(ch)};`, { read: true }); }
+          this._mwDone(ch);
         }
         break;
       }
@@ -699,12 +700,21 @@ export class FTX1 extends EventTarget {
   }
   readMem(ch) { (this._mrQ ||= []).push(ch); this.send(`MR${this.memId(ch)};`, { read: true }); }
   // MW: MAIN (frequency, clarifier, mode, tone / DCS mode, repeater shift) into a channel, as [V/M] held in the list.
-  // (checked on the radio: P7 must be 1, and MW clears the channel's tag; the tone frequency / DCS code are not in MW)
+  // (checked on the radio: P7 must be 1, and MW clears the channel's tag; the tone frequency / DCS code are not in MW;
+  // the shift takes 0-2 only, so ARS (OS 3) is written as simplex). The channel is read back and 'memwrite' tells
+  // whether it now holds the frequency.
   writeMem(ch) {
-    const s = this.s, o = s.clarOfs[0] || 0;
+    const s = this.s, o = s.clarOfs[0] || 0, os = s.os[0] <= 2 ? s.os[0] || 0 : 0;
+    this._mw = { ch, f: s.freq[0] };
     this.send(`MW${this.memId(ch)}${pad(s.freq[0], 9)}${o < 0 ? '-' : '+'}${pad(Math.abs(o), 4)}` +
-      `${s.clarRx[0] ? 1 : 0}${s.clarTx[0] ? 1 : 0}${s.mode[0]}1${s.ct[0] || 0}00${s.os[0] || 0};`);
+      `${s.clarRx[0] ? 1 : 0}${s.clarTx[0] ? 1 : 0}${s.mode[0]}1${s.ct[0] || 0}00${os};`);
     setTimeout(() => this.readMem(ch), 300);
+  }
+  _mwDone(ch) {
+    if (this._mw?.ch !== ch) return;
+    const ok = this.s.memList[ch]?.f === this._mw.f;
+    this._mw = null;
+    this._emit('memwrite', { ch, ok });
   }
   // MC selects a channel and puts MAIN in memory mode (checked on the radio)
   setMemCh(ch) { this._set('MC', `MC0${this.memId(ch)};`, () => { this.s.memCh = ch; }); this._refreshVfo(0); }
