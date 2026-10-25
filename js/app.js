@@ -900,6 +900,12 @@ function setupKnobs991() {
   });
   ui.dial = new Dial($('#dial'), { stepsPerRev: +cfg.dialRes, onStep: (n) => tune(n, 0) });
 }
+// FTX-1 memory mode: the main dial changes the channel, 8 a turn (a wheel notch one), as the radio does
+function memDialMode() { return !IS991 && s.vm[0].t === 1; }
+function memDial(n) {
+  if (s.lock) { popup('LOCK', 'DIAL LOCK', 0); return; }
+  for (let i = 0; i < Math.abs(n); i++) radio.memStep(n > 0);
+}
 function setupKnobs() {
   if (IS991) { setupKnobs991(); return; }
   for (let v = 0; v < 2; v++) {
@@ -947,7 +953,7 @@ function setupKnobs() {
     onPress: () => radio.swap(),
   });
 
-  ui.dial = new Dial($('#dial'), { stepsPerRev: +cfg.dialRes, onStep: (n) => tune(n, 0) });
+  ui.dial = new Dial($('#dial'), { stepsPerRev: +cfg.dialRes, onStep: (n) => tune(n, 0), onNotch: (n) => memDialMode() && (memDial(n), true) });
 }
 
 // default dial steps per mode (FTX-1 manual p.11): normal / [FINE] / (FAST)
@@ -975,6 +981,12 @@ function tune(n, v) {
   if (!IS991 && v === 0 && (s.clarRx[0] || s.clarTx[0])) {
     radio.setClarOffset(0, s.clarOfs[0] + n * 10);
     popup('CLAR', signed(s.clarOfs[0], 'Hz'), (s.clarOfs[0] + 9999) / 19998);
+    return;
+  }
+  if (v === 0 && memDialMode()) {
+    ui.memAcc = (ui.memAcc || 0) + n;
+    const per = +cfg.dialRes / 8, k = Math.trunc(ui.memAcc / per);
+    if (k) { ui.memAcc -= k * per; memDial(k); }
     return;
   }
   const step = curStep(v);

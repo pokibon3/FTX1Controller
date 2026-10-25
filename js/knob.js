@@ -115,10 +115,12 @@ export class Knob {
 }
 
 export class Dial {
-  constructor(el, { onStep, stepsPerRev = 250 } = {}) {
+  // onNotch(n): optional; returning true takes a wheel notch whole (the disc turns n/8 of a turn) instead of steps
+  constructor(el, { onStep, onNotch, stepsPerRev = 250 } = {}) {
     this.el = el;
     this.disc = el.querySelector('.dial-disc');
     this.onStep = onStep;
+    this.onNotch = onNotch;
     this.stepsPerRev = stepsPerRev;
     this.angle = 0;     // visual rotation (deg)
     this.accDeg = 0;    // not yet emitted rotation
@@ -163,6 +165,12 @@ export class Dial {
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
       const notch = wheelNotch(e, this.wheelState);
+      if (notch && this.onNotch?.(notch)) {
+        this.wheelAcc = 0;
+        this.angle += notch * 45;
+        this.disc.style.transform = `rotate(${this.angle}deg)`;
+        return;
+      }
       this.wheelAcc += e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY;
       let n = Math.trunc(this.wheelAcc / 20);
       if (!n && notch) n = -notch;

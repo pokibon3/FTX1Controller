@@ -691,6 +691,8 @@ export class FTX1 extends EventTarget {
   // memory keys: [V/M] (VM), memory -> MAIN VFO (MA), memory tune (VM P2=10)
   vmKey() { this.send('VM;'); this._refreshVfo(0); }
   memToVfo() { this.send('MA;'); this._refreshVfo(0); }
+  // CH: MAIN's memory channel up / down (memory mode), as the main dial
+  memStep(up) { this.send(`CH${up ? 0 : 1};`); this._refreshVfo(0); }
   memTune(vfo = 0) { this.send(`VM${vfo}10;`); this._refreshVfo(vfo); }
   // memory channel list (V/M held): channels 1-99, then the PMS pairs P-01L / P-01U ... P-50L / P-50U as 100-199
   memId(ch) { return ch <= 99 ? pad(ch, 5) : `P-${pad(Math.floor((ch - 100) / 2) + 1, 2)}${ch % 2 ? 'U' : 'L'}`; }
