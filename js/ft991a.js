@@ -23,8 +23,8 @@ export class FT991A extends FTX1 {
   // RTS on (the radio answers only then while menu 033 CAT RTS is ENABLE) and DTR off: with DTR on (as a port is often
   // opened on macOS) its replies come garbled or not at all. Measured on a radio: 1 or 2 stop bits both work.
   rates = [38400, 4800, 9600, 19200]; // menu 031 CAT RATE goes up to 38400
-  // (also NR0 / IS0: refused where the mode has no DNR / IF SHIFT, as FM; logged, not counted as errors)
-  modeDependent = /^(MG|RA|NR0|IS0)/;
+  // (also NR0 / IS0 / BC0 / NA0, refused in some modes, see _levelPoll; logged, not counted as errors)
+  modeDependent = /^(MG|RA|NR0|IS0|BC0|NA0)/;
   async _afterOpen() { await this.link.setSignals({ requestToSend: true, dataTerminalReady: false }).catch(() => {}); }
 
   // ---- polling ----
@@ -42,8 +42,11 @@ export class FT991A extends FTX1 {
   _levelPoll() {
     const p = { poll: true };
     if (bandType(this.s.freq[0]) === 0) this.send('RA0;', p);
-    // (NR0 / IS0: the radio answers '?' in the FM modes, which have no DNR or IF SHIFT; read in the others only, so not at connect either)
-    ['AG0;', 'SQ0;', 'RG0;', 'PC;', 'FT;', 'LK;', 'NB0;', 'NL0;', ...(isFM(this.s.mode[0]) ? [] : ['NR0;', 'IS0;']), 'RL0;', 'NA0;', 'PA0;', 'GT0;', 'SH0;',
+    // reads the radio answers '?' to in some modes (tried on the radio in each mode): NR0 in FM / FM-N / DATA-FM / C4FM,
+    // IS0 there and in AM / AM-N, NA0 in C4FM; read where they work only, so not at connect either
+    const m = this.s.mode[0], fm = isFM(m);
+    ['AG0;', 'SQ0;', 'RG0;', 'PC;', 'FT;', 'LK;', 'NB0;', 'NL0;', ...(fm ? [] : ['NR0;']), ...(fm || m === '5' || m === 'D' ? [] : ['IS0;']),
+      'RL0;', ...(m === 'E' ? [] : ['NA0;']), 'PA0;', 'GT0;', 'SH0;',
       'FS;', 'MS;', 'ML0;', 'ML1;', 'CS;', 'PL;', 'VD;', 'SD;'].forEach((c) => this.send(c, p));
   }
 

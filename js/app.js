@@ -134,7 +134,15 @@ const PARAMS = {
       if (!s.clarRx[V()] && !s.clarTx[V()]) radio.setClar(V(), true, false);
     },
   },
+  // FT-991A CH DIAL (manual p.41): MULTI tunes in channel steps; the value is the step, chosen per mode group
+  ...(IS991 ? { chd: { name: 'CH DIAL', get: () => chdIdx(), set: (v) => setChdIdx(v), min: 0, max: () => chdSteps().length - 1, step: 1, fmt: (v) => `${chdSteps()[v]}kHz` } } : {}),
 };
+// CH DIAL steps (kHz) as the radio cycles them: AM; FM / C4FM / DATA-FM; CW / SSB / RTTY / DATA-LSB / DATA-USB
+const CHD_STEPS = { am: [2.5, 5, 9, 10, 12.5, 25], fm: [5, 6.25, 10, 12.5, 15, 20, 25], ssb: [1, 2.5, 5] };
+const chdGroup = () => (['5', 'D'].includes(s.mode[0]) ? 'am' : isFM(s.mode[0]) ? 'fm' : 'ssb');
+const chdSteps = () => CHD_STEPS[chdGroup()];
+const chdIdx = () => Math.min((cfg.chd991 || {})[chdGroup()] || 0, chdSteps().length - 1);
+function setChdIdx(i) { cfg.chd991 = { ...cfg.chd991, [chdGroup()]: i }; save(); }
 
 // VD / SD code -> ms (00 30, 01 50, 02-05 100-250, 06-33 300-3000)
 const delayMs = (c) => [30, 50, 100, 150, 200, 250][c] ?? (c - 3) * 100;
@@ -167,8 +175,9 @@ radio.addEventListener('change', () => {
 // FT-991A: the MULTI knob's functions as its screen names them (manual p.22), and the ones it can take
 const MULTI_NAME = { power: 'RF-P', mic: 'MIC-G', nb: 'NB-L', shift: 'SHIFT', width: 'WIDTH', notch: 'NOTCH', contour: 'CONT', nr: 'DNR',
   proc: 'PROC', moni: 'MONI', ks: 'SPEED', apf: 'APF', kp: 'PITCH', sql: 'SQL', tone: 'TONE', dcs: 'DCS', clar: 'CLAR',
-  voxGain: 'VOX-G', voxDelay: 'VOX-D', bkDelay: 'BK-D' };
+  voxGain: 'VOX-G', voxDelay: 'VOX-D', bkDelay: 'BK-D', chd: 'CH-D' };
 if (IS991 && !MULTI_NAME[cfg.func]) cfg.func = 'power';
+if (!PARAMS[cfg.func]) cfg.func = 'af'; // (FTX-1 after the FT-991A's CH DIAL, which it does not have; settings are shared)
 const funcName = () => (IS991 ? MULTI_NAME[cfg.func]
   : radio.connected && ui.funcRadioOnly ? SF_NAME[s.sf] : val(PARAMS[cfg.func].name).replace(/ (MAIN|SUB)$/, ''));
 function assignFunc(key) {
@@ -302,7 +311,7 @@ const F991_PAGES = () => [
     { label: 'PLAY', act: () => openPop('PLAY') },
     { label: 'REC', act: () => openPop('RECORD') },
     { label: 'MCH', na: true },
-    { label: 'GRP', na: true },
+    { label: 'CH DIAL', value: () => `${chdSteps()[chdIdx()]}kHz`, func: 'chd', act: () => { if (cfg.func === 'chd') setChdIdx((chdIdx() + 1) % chdSteps().length); } },
     { label: 'MENU', value: () => 'SETUP', act: () => { closePop(); openSettings(0); } },
   ],
 ];
@@ -765,7 +774,12 @@ function setupKnobs991() {
     onTurn: (n) => {
       // menu: MULTI moves through the items; after SELECT it changes the value (as on the radio)
       if (!$('#exm').hidden && exSel) { if (ui.exEdit) exAdjust(n); else exMove(n); multi.showFree(); return; }
-      adjust(cfg.func, n); multi.showFree();
+      if (cfg.func === 'chd') {
+        if (s.lock) { popup('LOCK', 'DIAL LOCK', 0); return; }
+        const step = chdSteps()[chdIdx()] * 1000;
+        radio.setFreq(0, Math.round(s.freq[0] / step) * step + n * step);
+      } else adjust(cfg.func, n);
+      multi.showFree();
     },
   });
   const cv = new Knob($('#knSubDial'), {
