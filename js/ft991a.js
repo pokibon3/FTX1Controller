@@ -285,10 +285,6 @@ export class FT991A extends FTX1 {
   readMem(ch) { (this._mrQ ||= []).push(ch); this.send(`MR${String(ch).padStart(3, '0')};`, { read: true }); }
   _onMessage(m) {
     if (this.s.radioOff) this._wake();
-    if (m === '?' && /^MR/.test(this.pending?.[0] || '')) {
-      const ch = this._mrQ?.shift();
-      if (ch) this.s.memList = { ...this.s.memList, [ch]: null };
-    }
     super._onMessage(m);
   }
   // MW: VFO-A (frequency, clarifier, mode, tone / DCS mode, repeater shift) into a memory channel, as [A>M] held

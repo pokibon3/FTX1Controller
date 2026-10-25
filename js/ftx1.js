@@ -158,6 +158,7 @@ function initialState() {
     fn: 0,            // FN: 0 off / 1 FINE / 2 FAST
     ms: ['0', '0'],   // MS: TX meter shown on MAIN / SUB (0 PO 1 COMP 2 ALC 3 VDD 4 ID 5 SWR)
     vm: [{ t: 0, ch: '' }, { t: 0, ch: '' }], // IF/OI P7 (0 VFO 1 memory 2 memory tune 3 QMB 5 PMS) and P1
+    memCh: 1, memList: {}, // MC (MAIN side); MR / MT by channel: { f, mode, tag } or null when empty
     ri: null,         // RI: { hiswr, tuning, busy } (MAIN side)
     // radio's own spectrum scope (SS P2 -> P3): 0 SPEED, 5 SPAN, 6 MODE
     scope: { 0: '2', 1: '0', 2: '0', 3: '0', 4: 0, 5: '6', 6: '0' }, // 1 PEAK, 2 MARKER, 3 COLOR, 4 LEVEL (dB)
@@ -398,6 +399,13 @@ export class FTX1 extends EventTarget {
     if (m === '?') {
       // the oldest read still waiting for its answer is the one the radio rejected
       const bad = (this.pending || []).shift();
+      // an empty memory channel answers MR / MT with '?'
+      if (/^M[RT]/.test(bad || '')) {
+        const ch = (bad[1] === 'R' ? this._mrQ : this._mtQ)?.shift();
+        if (ch && bad[1] === 'R') s.memList = { ...s.memList, [ch]: null };
+        this._changed();
+        return;
+      }
       if (bad && this.modeDependent.test(bad)) {
         this._emit('log', { dir: 'sys', text: `${bad} not available in this mode / band` });
         return;
@@ -438,6 +446,24 @@ export class FTX1 extends EventTarget {
         if (MODE_NAME[p[21]] && ok('MD' + vfo)) s.mode[vfo] = p[21];
         break;
       }
+      // MR: channel (5) + freq (9) + clar (5) + RX / TX clar + mode + ...; MT: channel (5) + tag (12); MC: side + channel
+      case 'MR': {
+        const ch = this.memIdx(p.slice(0, 5)), qi = this._mrQ?.indexOf(ch) ?? -1;
+        if (qi >= 0) this._mrQ.splice(qi, 1);
+        const f = p.slice(5, 14);
+        if (ch) {
+          s.memList = { ...s.memList, [ch]: /^\d{9}$/.test(f) && +f ? { f: +f, mode: p[21], tag: s.memList[ch]?.tag || '' } : null };
+          if (s.memList[ch]) { (this._mtQ ||= []).push(ch); this.send(`MT${this.memId(ch)};`, { read: true }); }
+        }
+        break;
+      }
+      case 'MT': {
+        const ch = this.memIdx(p.slice(0, 5)), qi = this._mtQ?.indexOf(ch) ?? -1;
+        if (qi >= 0) this._mtQ.splice(qi, 1);
+        if (s.memList[ch]) s.memList = { ...s.memList, [ch]: { ...s.memList[ch], tag: p.slice(5).trimEnd() } };
+        break;
+      }
+      case 'MC': if (p[0] === '0' && ok('MC') && this.memIdx(p.slice(1))) s.memCh = this.memIdx(p.slice(1)); break;
       case 'MD':
         if (MODE_NAME[p[1]] && ok('MD' + v)) {
           // MG is refused in CW; read it again when leaving CW
@@ -661,11 +687,36 @@ export class FTX1 extends EventTarget {
     return this.connect(port, rate);
   }
 
-  // memory keys: [V/M] (VM), MAIN -> memory write (AM), memory -> MAIN VFO (MA), memory tune (VM P2=10)
+  // memory keys: [V/M] (VM), memory -> MAIN VFO (MA), memory tune (VM P2=10)
   vmKey() { this.send('VM;'); this._refreshVfo(0); }
-  memWrite() { this.send('AM;'); }
   memToVfo() { this.send('MA;'); this._refreshVfo(0); }
   memTune(vfo = 0) { this.send(`VM${vfo}10;`); this._refreshVfo(vfo); }
+  // memory channel list (V/M held): channels 1-99, then the PMS pairs P-01L / P-01U ... P-50L / P-50U as 100-199
+  memId(ch) { return ch <= 99 ? pad(ch, 5) : `P-${pad(Math.floor((ch - 100) / 2) + 1, 2)}${ch % 2 ? 'U' : 'L'}`; }
+  memIdx(id) {
+    const m = /^P-(\d\d)([LU])$/.exec(id);
+    return m ? 100 + (+m[1] - 1) * 2 + (m[2] === 'U' ? 1 : 0) : /^\d{5}$/.test(id) && +id <= 99 ? +id : 0;
+  }
+  readMem(ch) { (this._mrQ ||= []).push(ch); this.send(`MR${this.memId(ch)};`, { read: true }); }
+  // MW: MAIN (frequency, clarifier, mode, tone / DCS mode, repeater shift) into a channel, as [V/M] held in the list.
+  // (checked on the radio: P7 must be 1, and MW clears the channel's tag; the tone frequency / DCS code are not in MW)
+  writeMem(ch) {
+    const s = this.s, o = s.clarOfs[0] || 0;
+    this.send(`MW${this.memId(ch)}${pad(s.freq[0], 9)}${o < 0 ? '-' : '+'}${pad(Math.abs(o), 4)}` +
+      `${s.clarRx[0] ? 1 : 0}${s.clarTx[0] ? 1 : 0}${s.mode[0]}1${s.ct[0] || 0}00${s.os[0] || 0};`);
+    setTimeout(() => this.readMem(ch), 300);
+  }
+  // MC selects a channel and puts MAIN in memory mode (checked on the radio)
+  setMemCh(ch) { this._set('MC', `MC0${this.memId(ch)};`, () => { this.s.memCh = ch; }); this._refreshVfo(0); }
+  // [M>V] in the list: the chosen channel into MAIN's VFO (MC, back to VFO, MA)
+  memChToVfo(ch) { this.send(`MC0${this.memId(ch)};`); this.send('VM000;'); this.send('MA;'); this.s.memCh = ch; this._refreshVfo(0); }
+  // MT: the channel's tag (ASCII 0x20-0x7D, up to 12)
+  setMemTag(ch, tag) {
+    tag = tag.replace(/[^\x20-\x7d]/g, '').slice(0, 12);
+    this.send(`MT${this.memId(ch)}${tag.padEnd(12, ' ')};`);
+    if (this.s.memList[ch]) this.s.memList = { ...this.s.memList, [ch]: { ...this.s.memList[ch], tag } };
+    this._changed();
+  }
   setLock(on) { this._set('LK', `LK${on ? 1 : 0};`, () => { this.s.lock = on; }); }
   selectVFO(v) { this._set('VS', `VS${v};`, () => { this.s.vs = v; }); }
   setTxVFO(v) { this._set('FT', `FT${v};`, () => { this.s.ft = v; }); }

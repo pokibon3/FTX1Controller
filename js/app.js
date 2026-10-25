@@ -141,27 +141,55 @@ const PARAMS = {
 };
 // CH DIAL steps (kHz) as the radio cycles them: AM; FM / C4FM / DATA-FM; CW / SSB / RTTY / DATA-LSB / DATA-USB
 // FT-991A memory channel names: 001-099, then the PMS pairs P-1L / P-1U ... P-9L / P-9U (100-117)
-const memChName = (v) => (v <= 99 ? String(v).padStart(3, '0') : `P-${Math.floor((v - 100) / 2) + 1}${v % 2 ? 'U' : 'L'}`);
-// ---------------- FT-991A memory write (manual p.92) ----------------
-// [A▸M] shows the memory channel list (read with MR) for about 10 s; MULTI moves through it; [A▸M] held writes VFO-A
-// into the chosen channel (MW, which leaves the radio in VFO), as on the radio
+// (FTX-1: M-001 ... M-099, then P-01L / P-01U ... P-50L / P-50U as 100-199)
+const memChName = (v) => (IS991 ? (v <= 99 ? String(v).padStart(3, '0') : `P-${Math.floor((v - 100) / 2) + 1}${v % 2 ? 'U' : 'L'}`)
+  : v <= 99 ? `M-${String(v).padStart(3, '0')}` : radio.memId(v));
+const MEM_MAX = IS991 ? 117 : 199;
+// ---------------- memory channel list ----------------
+// FT-991A (manual p.92): [A▸M] shows the list (read with MR) for about 10 s; MULTI moves through it; [A▸M] held writes
+// VFO-A into the chosen channel (MW, which leaves the radio in VFO).
+// FTX-1 (manual p.68-73): [V/M] held shows the list, four channels a page with NAME ... BACK keys; the FUNC knob, the
+// wheel or a touch picks a channel; [V/M] held writes MAIN into it (MW) and the list stays; FUNC pressed recalls it;
+// [M▸V] copies it to the VFO; [V/M] or BACK closes the list.
 const mwl = { on: false, ch: 1, t: 0 };
-const memRows = () => [-2, -1, 0, 1, 2].map((d) => mwl.ch + d).filter((c) => c >= 1 && c <= 117);
-function memListTimer() { clearTimeout(mwl.t); mwl.t = setTimeout(() => memListShow(false), 10000); }
+const memRows = () => (IS991 ? [-2, -1, 0, 1, 2].map((d) => mwl.ch + d) : [0, 1, 2, 3].map((d) => Math.floor((mwl.ch - 1) / 4) * 4 + 1 + d))
+  .filter((c) => c >= 1 && c <= MEM_MAX);
+function memListTimer() { clearTimeout(mwl.t); if (IS991) mwl.t = setTimeout(() => memListShow(false), 10000); }
 function memListRead() { for (const c of memRows()) if (!(c in (s.memList || {}))) radio.readMem(c); }
 function memListShow(on) {
   if (on && !radio.connected) { toast('CATが接続されていません', true); return; }
   mwl.on = on;
   clearTimeout(mwl.t);
-  if (on) { closePop(); mwl.ch = s.memCh || 1; memListRead(); memListTimer(); }
+  if (on) {
+    closePop();
+    // (FTX-1: the channel in use in memory mode, else the last one used)
+    const cur = !IS991 && s.vm[0].t === 1 ? radio.memIdx(s.vm[0].ch) : 0;
+    mwl.ch = cur || s.memCh || 1;
+    memListRead(); memListTimer();
+  }
   render();
 }
-function memListMove(n) { mwl.ch = clamp(mwl.ch + n, 1, 117); memListRead(); memListTimer(); render(); }
+function memListMove(n) { mwl.ch = clamp(mwl.ch + n, 1, MEM_MAX); memListRead(); memListTimer(); render(); }
 function memListWrite() {
   if (s.memList) delete s.memList[mwl.ch];
   radio.writeMem(mwl.ch);
-  popup('A▸M', `MEMORY WRITE ${memChName(mwl.ch)}`, 1);
-  memListShow(false);
+  popup(IS991 ? 'A▸M' : 'V/M', `MEMORY WRITE ${memChName(mwl.ch)}`, 1);
+  if (IS991) memListShow(false); else render();
+}
+// FTX-1 list keys: FUNC press recalls the channel, [M▸V] copies it to the VFO, NAME sets its tag
+function memListRecall() {
+  if (!s.memList?.[mwl.ch]) { popup('MEMORY', `${memChName(mwl.ch)} EMPTY`, 0); return; }
+  radio.setMemCh(mwl.ch); memListShow(false);
+}
+function memListToVfo() {
+  if (!s.memList?.[mwl.ch]) { popup('M▸V', `${memChName(mwl.ch)} EMPTY`, 0); return; }
+  radio.memChToVfo(mwl.ch); popup('M▸V', memChName(mwl.ch), 1); memListShow(false);
+}
+function memListName() {
+  const m = s.memList?.[mwl.ch];
+  if (!m) { popup('NAME', `${memChName(mwl.ch)} EMPTY`, 0); return; }
+  const t = prompt(`${memChName(mwl.ch)} の名前（英数字・記号 12 文字まで）`, m.tag || '');
+  if (t != null) radio.setMemTag(mwl.ch, t);
 }
 // a list line as the radio's: "01ch  7.000.00 LSB"
 function memLine(c) {
@@ -512,6 +540,7 @@ const SCREENS = {
 let popItems = [];
 function openPop(name, target = null) {
   if (ui.pop === name && target === ui.target) { closePop(); return; }
+  if (mwl.on) { mwl.on = false; clearTimeout(mwl.t); }
   ui.pop = name;
   ui.target = target;
   if (IS991 && SCREENS[name].f991) ui.multiOn = true; // (function screen up: MULTI works the last chosen function)
@@ -899,11 +928,12 @@ function setupKnobs() {
     pxPerStep: 6,
     onTurn: (n) => {
       if (!$('#exm').hidden && exSel) { exAdjust(n); func.showFree(); return; }
+      if (mwl.on) { memListMove(n); func.showFree(); return; }
       // a radio-only function (D-LEVEL ...) has no CAT command to adjust; say so instead of turning something else
       if (radio.connected && ui.funcRadioOnly) { popup(SF_NAME[s.sf], '本体で操作', 0); func.showFree(); return; }
       adjust(cfg.func, n); func.showFree();
     },
-    onPress: () => (SCREENS[ui.pop]?.fmenu ? closePop() : openPop('FUNCTION 1/3')),
+    onPress: () => (mwl.on ? memListRecall() : SCREENS[ui.pop]?.fmenu ? closePop() : openPop('FUNCTION 1/3')),
   });
 
   const sub = new Knob($('#knSubDial'), {
@@ -1020,8 +1050,12 @@ const ACTIONS = {
   // ◢ key: press swaps MAIN/SUB (SV), hold toggles SPLIT (manual: SPLIT is the long press)
   split: { press: () => radio.swap(), hold: toggleSplit },
   // (FT-991A: V/M has no hold function; memory writes go through [A▸M] and its channel list)
-  vm: { press: () => radio.vmKey(), hold: () => { if (IS991) return; radio.memWrite(); popup('MW', 'MEMORY WRITE', 1); } },
-  mv: { press: () => radio.memToVfo(), hold: () => { radio.memTune(0); popup('MT', 'MEMORY TUNE', 1); } },
+  // (FTX-1: held shows the memory channel list; held again with the list up writes MAIN into the chosen channel)
+  vm: {
+    press: () => (mwl.on ? memListShow(false) : radio.vmKey()),
+    hold: () => { if (IS991) return; if (mwl.on) memListWrite(); else memListShow(true); },
+  },
+  mv: { press: () => (mwl.on ? memListToVfo() : radio.memToVfo()), hold: () => { radio.memTune(0); popup('MT', 'MEMORY TUNE', 1); } },
   // no CAT command exists for these
   gm: () => toast('GM は CAT では操作できません'),
   sdx: () => toast('S-DX は CAT では操作できません'),
@@ -2251,18 +2285,36 @@ function statusHtml991() {
   ].filter(Boolean);
   return items.map(([t, c, x, y]) => `<span class="si ${c}" style="left:${x}cqi;top:${y}cqi">${t}</span>`).join('');
 }
+// FTX-1 list keys (manual p.68): only NAME and BACK have CAT commands
+const MEM_KEYS_FTX1 = [['NAME', memListName], ['MODE'], ['SCAN<br>MEMORY'], ['FREQ'], ['SPLIT<br>MEMORY'], ['DELETE'], ['M-GRP'],
+  ['BACK', () => memListShow(false)]];
+// an FTX-1 list row: "M-001 | 7.060.000 LSB | tag"
+function memRowFtx1(c) {
+  const m = s.memList?.[c], f = m?.f;
+  const fq = !m ? (m === null ? '---.---.---' : '') : `${Math.floor(f / 1e6)}.${String(Math.floor(f / 1e3) % 1000).padStart(3, '0')}.${String(f % 1000).padStart(3, '0')}`;
+  const tag = (m?.tag || '').replace(/[&<>]/g, (x) => `&#${x.charCodeAt(0)};`);
+  return `<div data-ch="${c}" class="mr${c === mwl.ch ? ' sel' : ''}"><span class="mc">${memChName(c)}</span>` +
+    `<span class="mf"><b>${fq}</b><i>${m ? MODE_NAME[m.mode] || '' : m === null ? '-------' : ''}</i></span><span class="mt">${tag}</span></div>`;
+}
 function drawMemList() {
   let el = $('#memList');
   if (!el) {
-    el = document.createElement('div'); el.id = 'memList'; el.className = 'memlist'; $('#lcd').appendChild(el);
-    // mouse: the wheel moves through the channels (a notch a channel), a click picks the line
+    el = document.createElement('div'); el.id = 'memList'; el.className = IS991 ? 'memlist' : 'memlist memlist-ftx'; $('#lcd').appendChild(el);
+    // mouse: the wheel moves through the channels (a notch a channel), a click picks the line (or works a key)
     const ws = {};
     el.addEventListener('wheel', (e) => { e.preventDefault(); const n = wheelNotch(e, ws); if (n) memListMove(-wheelAccel(n, ws)); }, { passive: false });
-    el.addEventListener('click', (e) => { const c = +e.target.closest('[data-ch]')?.dataset.ch; if (c) memListMove(c - mwl.ch); });
+    el.addEventListener('click', (e) => {
+      const k = e.target.closest('[data-k]');
+      if (k) { const [name, fn] = MEM_KEYS_FTX1[+k.dataset.k]; if (fn) fn(); else toast(`${name.replace('<br>', ' ')} は CAT では操作できません（本体で操作）`); return; }
+      const c = +e.target.closest('[data-ch]')?.dataset.ch; if (c) memListMove(c - mwl.ch);
+    });
   }
+  if (mwl.on && !radio.connected) mwl.on = false;
   el.hidden = !mwl.on;
   if (!mwl.on) return;
-  const html = memRows().map((c) => `<div data-ch="${c}" class="${c === mwl.ch ? 'sel' : ''}">${memLine(c)}</div>`).join('');
+  const html = IS991 ? memRows().map((c) => `<div data-ch="${c}" class="${c === mwl.ch ? 'sel' : ''}">${memLine(c)}</div>`).join('')
+    : `<div class="mrows">${memRows().map(memRowFtx1).join('')}</div><div class="mkeys">${MEM_KEYS_FTX1.map(([n, fn], i) =>
+      `<button data-k="${i}" class="${fn ? '' : 'na'}${n === 'BACK' ? ' back' : ''}">${n}</button>`).join('')}</div>`;
   if (el.innerHTML !== html) el.innerHTML = html;
 }
 function drawFace991(conn) {
@@ -2342,6 +2394,7 @@ function draw() {
 }
 
 function drawFaceFtx1(conn) {
+  drawMemList();
   const lcd = $('#lcd');
   // dark while POWER is off; connected but before the radio has sent its frequency, the keys show and the values stay
   // blank (not the placeholders such as 14.200)

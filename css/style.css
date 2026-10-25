@@ -978,6 +978,21 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .lcd991 .sk span, .lcd991 .pop.f991 .pt span { display: block; min-height: 3.3cqi; font: 700 2.9cqi/3.3cqi var(--t9-cond); letter-spacing: .25cqi; color: var(--t9-blue);
   text-align: center; background: #000; border-radius: .3cqi; max-width: none; overflow: hidden; }
 /* memory channel list ([A▸M], manual p.92): white lines over the lower screen, the chosen one framed in blue */
+/* FTX-1 memory channel list (manual p.68): four rows of channel / frequency + mode / tag, NAME ... BACK keys at the right */
+.memlist-ftx { position: absolute; left: 0; right: 0; top: 25.6cqi; bottom: 0; z-index: 6; background: #000; display: grid;
+  grid-template-columns: 1fr 26cqi; gap: .8cqi; padding: .6cqi .5cqi; font-weight: 700; color: #f4f6f8; }
+.memlist-ftx[hidden] { display: none; }
+.memlist-ftx .mrows { display: grid; grid-template-rows: repeat(4, 1fr); gap: .8cqi; }
+.memlist-ftx .mr { display: grid; grid-template-columns: 10cqi 1fr 1fr; gap: .4cqi; padding: .3cqi; border: .3cqi solid transparent; border-radius: .5cqi; cursor: pointer; }
+.memlist-ftx .mr.sel { border-color: #e8833a; }
+.memlist-ftx .mr > span { display: flex; align-items: center; border: .15cqi solid #4a4d52; background: #121315; padding: 0 1cqi; font-size: 2.2cqi; white-space: nowrap; overflow: hidden; }
+.memlist-ftx .mc { justify-content: center; }
+.memlist-ftx .mf b { font-weight: 700; min-width: 13cqi; }
+.memlist-ftx .mf i { font-style: normal; margin-left: 1.5cqi; }
+.memlist-ftx .mkeys { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(4, 1fr); gap: .8cqi .6cqi; }
+.memlist-ftx .mkeys button { border: 0; border-radius: .5cqi; background: linear-gradient(180deg, #686c72 0%, #4c4f54 50%, #3b3d41 100%);
+  box-shadow: inset 0 .15cqi 0 rgba(255,255,255,.18); color: #f4f6f8; font: 700 1.9cqi/1.1 inherit; font-family: inherit; cursor: pointer; }
+.memlist-ftx .mkeys button.back { color: #f0a020; }
 .lcd991 .memlist { position: absolute; inset: 40.3cqi 0 12.2cqi 0; z-index: 6; background: #000; display: flex; flex-direction: column;
   justify-content: center; gap: .6cqi; padding: 1cqi 3cqi; font: 700 3.6cqi/1.25 var(--t9-cond); letter-spacing: .1cqi; color: #fff; white-space: pre; }
 .lcd991 .memlist[hidden] { display: none; }
