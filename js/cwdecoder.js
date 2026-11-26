@@ -58,6 +58,7 @@ export class CwDecoder extends EventTarget {
     this.chars = [];
     this.channel = 'L';
     this.nr = true;
+    this.engine = 1;   // 1 = DL (GRU, cw_decoder4's default), 0 = rule decoder
     this.wasm = null; // cached bytes (transferred copies are sent to each worklet)
     this.spec = new Uint16Array(SPEC_BINS);
     // scope columns (min / max raw, envelope, key gate), numbered from the core's running column count
@@ -106,6 +107,7 @@ export class CwDecoder extends EventTarget {
     this._wire();
     await ready;
     this._sendNr();  // the core starts with NR off (detector A); messages before 'ready' are dropped
+    this._sendEngine();  // the core starts with the rule decoder (0)
     this.dispatchEvent(new Event('state'));
   }
 
@@ -123,6 +125,8 @@ export class CwDecoder extends EventTarget {
   setToneHz(hz) { this.node?.port.postMessage({ type: 'toneHz', hz: Math.round(hz) }); }
   // NR as cw_decoder4 web/app.js sendNr(): on = detector E (DSP_DET_ALE_AMP = 4), off = A (0)
   setNr(on) { this.nr = on; this._sendNr(); }
+  setEngine(e) { this.engine = e; this._sendEngine(); }
+  _sendEngine() { this.node?.port.postMessage({ type: 'engine', mode: this.engine }); }
   _sendNr() { this.node?.port.postMessage({ type: 'det', mode: this.nr ? 4 : 0 }); }
   setGain(db) { this.node?.port.postMessage({ type: 'gain', value: Math.pow(10, db / 20) }); }
   clear() { this.chars = []; this.ticker = []; this.dispatchEvent(new Event('text')); }

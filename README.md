@@ -59,7 +59,7 @@ PTT は既定で CAT (`TX1;`)。RTS/DTR 方式にする場合は SETUP で方式
 
 ### CW デコーダ
 
-CW モードのときだけ、CW 受信（左）と CW 送信（右）のパネルが表示されます。CW 受信パネルの **DECODE** で、USB AUDIO RX の受信音をデコードします（[CW Decoder 4](https://github.com/pokibon3/cw_decoder4) の WebAssembly 版を AudioWorklet で実行。ESP32 版と同じ DSP / デコーダ）。
+CW モードのときだけ、CW 受信（左）と CW 送信（右）のパネルが表示されます。CW 受信パネルの **DECODE** で、USB AUDIO RX の受信音をデコードします（[CW Decoder 4](https://github.com/pokibon3/cw_decoder4) の WebAssembly 版を AudioWorklet で実行。ESP32 版と同じ DSP / デコーダ）。文字は CW Decoder 4 v4.1 の DL デコーダ（学習済みのニューラルネットワーク）で求めます。欧文・和文（`US`/`JP`）はホレ / ラタのほか、文字の並びからも判定して自動で切り替わります。
 CW 受信パネルは CW Decoder 4 の Web 版と同じ表示・操作です: `US`/`JP`（欧文・和文）、トーンボタン（AUTO = 500〜1000Hz 自動同調 / 手動 600〜1000Hz）、WPM・TONE・Peak・入力レベル（CLIP・実効入力レート）、コピー / クリア、
 FFT スペクトラム（クリックでトーン選択・ダブルクリックで全幅）、オシロスコープ（クリックで全幅、時間軸倍率、KEY / ENV / RAW 表示切替、デコード文字が波形に沿って流れる）。入力チャンネル・適応型フィルタ（ノイズ低減、既定 ON）・入力ゲインは左側パネルの CW DECODER で設定します。
 

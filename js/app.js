@@ -46,7 +46,7 @@ const DEFAULTS = {
   rxIn: '', rxOut: '', txIn: '', txOut: '', rxVol: 0.8, txGain: 1, txGate: true,
   showPoll: false, scopeSpan: 3000, func: 'af', meterSel: 5, layout: 'lr', layoutV2: true,
   cwMem: ['CQ CQ CQ DE ', '', '', '', ''], bandStack: {}, latch: false, qmb: [],
-  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, ft8Mode: 'FT8', pcSql: true, dec: true, decCh: 'L', decGain: 0, decNr: true, console: false,
+  sidebar: false, sections: {}, afFft: true, ft8: true, ft8Cq: false, ft8My: '', ft8Grid: '', ft8TxHz: 1500, ft8Lvl: 0.3, ft8Per: 0, ft8Auto: true, ft8Mode: 'FT8', pcSql: true, dec: true, decCh: 'L', decGain: 0, decNr: true, decEng: 1, console: false,
 };
 const cfg = (() => {
   // (each radio its own settings; the FT-991A's start from the ones shared before v1.38.0)
@@ -1730,6 +1730,7 @@ function setupDecoder() {
   const dec = new CwDecoder();
   dec.channel = cfg.decCh;
   dec.nr = cfg.decNr;
+  dec.engine = cfg.decEng;
   // display and controls as cw_decoder4's web page
   new CwView(dec, {
     panel: $('#panelDec'), text: $('#decText'), fft: $('#decFft'), scope: $('#decScope'),
@@ -1764,6 +1765,8 @@ function setupDecoder() {
   $('#decCh').addEventListener('change', (e) => { cfg.decCh = e.target.value; dec.setChannel(cfg.decCh); save(); });
   $('#decNr').checked = cfg.decNr;
   $('#decNr').addEventListener('change', (e) => { cfg.decNr = e.target.checked; dec.setNr(cfg.decNr); save(); });
+  $('#decEng').value = String(cfg.decEng);
+  $('#decEng').addEventListener('change', (e) => { cfg.decEng = +e.target.value; dec.setEngine(cfg.decEng); save(); });
   const gainLabel = () => { $('#decGainV').textContent = `${cfg.decGain > 0 ? '+' : ''}${cfg.decGain} dB`; };
   $('#decGain').value = cfg.decGain;
   gainLabel();
